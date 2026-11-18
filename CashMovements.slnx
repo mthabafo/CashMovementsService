@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="CashMovements.Application/CashMovements.Application.csproj" />
+    <Project Path="CashMovements.Domain/CashMovements.Domain.csproj" />
+    <Project Path="CashMovements.Infrastructure/CashMovements.Infrastructure.csproj" />
+    <Project Path="CashMovements/CashMovements.Grpc.csproj" />
+  </Folder>
+</Solution>
