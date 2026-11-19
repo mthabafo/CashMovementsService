@@ -8,7 +8,7 @@
     <Project Path="CashMovements.Application/CashMovements.Application.csproj" />
     <Project Path="CashMovements.Domain/CashMovements.Domain.csproj" />
     <Project Path="CashMovements.Infrastructure/CashMovements.Infrastructure.csproj" />
-    <Project Path="CashMovements/CashMovements.Grpc.csproj" />
+    <Project Path="CashMovements.Grpc/CashMovements.Grpc.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="CashMovements.IntegrationTests/CashMovements.IntegrationTests.csproj" />

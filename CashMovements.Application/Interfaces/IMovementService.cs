@@ -14,9 +14,12 @@ public interface IMovementService
         string currency,
         CancellationToken cancellationToken);
 
-    /// <summary>Statement for the period [<paramref name="from"/>, <paramref name="to"/>): opening, running and closing balances.</summary>
+    /// <summary>
+    /// Statement for the period [<paramref name="from"/>, <paramref name="to"/>), streamed: the header with the opening
+    /// balance is returned immediately and lines (with running balances) are read as the caller enumerates them.
+    /// </summary>
     /// <exception cref="InvalidValueException">The account ID, currency or period is invalid.</exception>
-    Task<Statement> GetStatementAsync(
+    Task<StatementStream> GetStatementAsync(
         string accountId,
         string currency,
         DateTimeOffset from,

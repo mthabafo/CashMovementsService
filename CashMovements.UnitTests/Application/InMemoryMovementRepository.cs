@@ -1,10 +1,11 @@
+using System.Runtime.CompilerServices;
 using CashMovements.Domain.Entities;
 using CashMovements.Domain.Interfaces;
 using CashMovements.Domain.ValueObjects;
 
 namespace CashMovements.UnitTests.Application;
 
-/// <summary>Test double that behaves like the real repository: assigns Ids, filters and sums in memory.</summary>
+/// <summary>Test double that behaves like the real repository: assigns Ids, filters, sums and orders in memory.</summary>
 internal sealed class InMemoryMovementRepository : IMovementRepository
 {
     private readonly List<Movement> _movements = [];
@@ -13,7 +14,12 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
 
     public int AddCalls { get; private set; }
 
-    public Task<Movement?> GetByExternalReferenceAsync(AccountId accountId, ExternalRef externalRef, CancellationToken cancellationToken)
+    public int StreamCalls { get; private set; }
+
+    /// <summary>Seeds an already-persisted movement directly, bypassing the service.</summary>
+    public void Seed(Movement movement) => _movements.Add(movement);
+
+    public Task<Movement?> FindByExternalRefAsync(AccountId accountId, ExternalRef externalRef, CancellationToken cancellationToken)
         => Task.FromResult(_movements.SingleOrDefault(m => m.AccountId == accountId && m.ExternalRef == externalRef));
 
     public Task<Movement> AddAsync(Movement movement, CancellationToken cancellationToken)
@@ -32,15 +38,35 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
         return Task.FromResult(stored);
     }
 
-    public Task<decimal> SumAsync(AccountId accountId, Currency currency, DateTimeOffset? before, CancellationToken cancellationToken)
-        => Task.FromResult(For(accountId, currency)
-            .Where(m => before is null || m.OccurredAt < before)
-            .Sum(m => m.Amount));
+    public Task<decimal> SumAmountsAsync(AccountId accountId, Currency currency, CancellationToken cancellationToken)
+        => Task.FromResult(For(accountId, currency).Sum(m => m.Amount));
 
-    public Task<IReadOnlyList<Movement>> ListAsync(AccountId accountId, Currency currency, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
-        => Task.FromResult<IReadOnlyList<Movement>>(For(accountId, currency)
+    public Task<decimal> SumAmountsBeforeAsync(AccountId accountId, Currency currency, DateTimeOffset before, CancellationToken cancellationToken)
+        => Task.FromResult(For(accountId, currency).Where(m => m.OccurredAt < before).Sum(m => m.Amount));
+
+    public async IAsyncEnumerable<Movement> StreamInPeriodAsync(
+        AccountId accountId,
+        Currency currency,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        StreamCalls++;
+
+        // Same ordering contract as the real query: ORDER BY OccurredAt, Id.
+        var rows = For(accountId, currency)
             .Where(m => m.OccurredAt >= from && m.OccurredAt < to)
-            .ToList());
+            .OrderBy(m => m.OccurredAt)
+            .ThenBy(m => m.Id)
+            .ToList();
+
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+            yield return row;
+        }
+    }
 
     private IEnumerable<Movement> For(AccountId accountId, Currency currency)
         => _movements.Where(m => m.AccountId == accountId && m.Currency == currency);

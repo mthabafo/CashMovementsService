@@ -15,78 +15,102 @@ public class StatementTests
     private static Movement Stored(long id, decimal amount, DateTimeOffset occurredAt, string currency = "ZAR", string accountId = "ACC1")
         => Movement.Rehydrate(id, accountId, $"REF-{id}", amount, currency, occurredAt, occurredAt, null);
 
-    private static Statement Build(decimal opening, params Movement[] movements)
-        => Statement.Build(Account, Zar, From, To, opening, movements);
+    private static StatementCalculator Calculator(decimal opening = 0m)
+        => new(StatementHeader.Create(Account, Zar, From, To, opening));
+
+    // ---- StatementHeader ----
+
+    [Fact]
+    public void Header_rejects_a_reversed_or_empty_period()
+    {
+        Assert.Throws<InvalidValueException>(() => StatementHeader.Create(Account, Zar, To, From, 0m));
+        Assert.Throws<InvalidValueException>(() => StatementHeader.Create(Account, Zar, From, From, 0m));
+    }
+
+    [Fact]
+    public void Header_normalises_period_bounds_to_utc()
+    {
+        var header = StatementHeader.Create(Account, Zar, From.ToOffset(TimeSpan.FromHours(2)), To, 0m);
+
+        Assert.Equal(TimeSpan.Zero, header.From.Offset);
+        Assert.Equal(From, header.From);
+    }
+
+    // ---- StatementCalculator ----
 
     [Fact]
     public void Running_balance_starts_from_the_opening_balance_and_can_go_negative()
     {
-        var statement = Build(
-            50m,
-            Stored(1, 100m, From.AddDays(1)),
-            Stored(2, -30m, From.AddDays(2)),
-            Stored(3, -500m, From.AddDays(3)));
+        var calculator = Calculator(opening: 50m);
 
-        Assert.Equal(50m, statement.OpeningBalance);
-        Assert.Equal(new[] { 150m, 120m, -380m }, statement.Lines.Select(l => l.RunningBalance));
-        Assert.Equal(-380m, statement.ClosingBalance);
+        var lines = new[]
+        {
+            calculator.Add(Stored(1, 100m, From.AddDays(1))),
+            calculator.Add(Stored(2, -30m, From.AddDays(2))),
+            calculator.Add(Stored(3, -500m, From.AddDays(3))),
+        };
+
+        Assert.Equal(new[] { 150m, 120m, -380m }, lines.Select(l => l.RunningBalance));
+        Assert.Equal(-380m, calculator.RunningBalance);
+        Assert.Equal(3, calculator.LineCount);
     }
 
     [Fact]
-    public void Lines_are_ordered_by_occurred_at_then_id()
+    public void Without_lines_the_running_balance_is_the_opening_balance()
     {
+        var calculator = Calculator(opening: 75.25m);
+
+        Assert.Equal(75.25m, calculator.RunningBalance);
+        Assert.Equal(0, calculator.LineCount);
+    }
+
+    [Fact]
+    public void Movements_at_the_same_instant_are_accepted_in_id_order()
+    {
+        var calculator = Calculator();
         var sameTime = From.AddDays(5);
 
-        var statement = Build(
-            0m,
-            Stored(3, 1m, sameTime),
-            Stored(9, 1m, From.AddDays(1)),
-            Stored(2, 1m, sameTime));
+        calculator.Add(Stored(2, 1m, sameTime));
+        calculator.Add(Stored(3, 1m, sameTime));
 
-        Assert.Equal(new long[] { 9, 2, 3 }, statement.Lines.Select(l => l.Movement.Id));
+        Assert.Equal(2, calculator.LineCount);
     }
 
     [Fact]
-    public void Empty_period_closes_at_the_opening_balance()
+    public void Out_of_order_movements_are_rejected()
     {
-        var statement = Build(75.25m);
+        var calculator = Calculator();
+        calculator.Add(Stored(5, 1m, From.AddDays(5)));
 
-        Assert.Empty(statement.Lines);
-        Assert.Equal(75.25m, statement.ClosingBalance);
+        Assert.Throws<ArgumentException>(() => calculator.Add(Stored(6, 1m, From.AddDays(4))));  // earlier time
+        Assert.Throws<ArgumentException>(() => calculator.Add(Stored(4, 1m, From.AddDays(5))));  // same time, lower Id
+        Assert.Throws<ArgumentException>(() => calculator.Add(Stored(5, 1m, From.AddDays(5))));  // same movement twice
+    }
+
+    [Fact]
+    public void A_rejected_movement_does_not_change_the_running_balance()
+    {
+        var calculator = Calculator(opening: 10m);
+
+        Assert.Throws<ArgumentException>(() => calculator.Add(Stored(1, 99m, To)));
+
+        Assert.Equal(10m, calculator.RunningBalance);
+        Assert.Equal(0, calculator.LineCount);
     }
 
     [Fact]
     public void Period_is_inclusive_at_the_start_and_exclusive_at_the_end()
     {
-        var statement = Build(0m, Stored(1, 10m, From));
-        Assert.Single(statement.Lines);
+        Calculator().Add(Stored(1, 10m, From));
 
-        Assert.Throws<ArgumentException>(() => Build(0m, Stored(2, 10m, To)));
-        Assert.Throws<ArgumentException>(() => Build(0m, Stored(3, 10m, From.AddTicks(-1))));
+        Assert.Throws<ArgumentException>(() => Calculator().Add(Stored(2, 10m, To)));
+        Assert.Throws<ArgumentException>(() => Calculator().Add(Stored(3, 10m, From.AddTicks(-1))));
     }
 
     [Fact]
     public void Movements_for_another_account_or_currency_are_rejected()
     {
-        Assert.Throws<ArgumentException>(() => Build(0m, Stored(1, 10m, From, currency: "USD")));
-        Assert.Throws<ArgumentException>(() => Build(0m, Stored(2, 10m, From, accountId: "ACC2")));
-    }
-
-    [Fact]
-    public void Reversed_or_empty_period_is_rejected()
-    {
-        Assert.Throws<InvalidValueException>(() => Statement.Build(Account, Zar, To, From, 0m, []));
-        Assert.Throws<InvalidValueException>(() => Statement.Build(Account, Zar, From, From, 0m, []));
-    }
-
-    [Fact]
-    public void Period_bounds_are_normalised_to_utc()
-    {
-        var localFrom = From.ToOffset(TimeSpan.FromHours(2));
-
-        var statement = Statement.Build(Account, Zar, localFrom, To, 0m, []);
-
-        Assert.Equal(TimeSpan.Zero, statement.From.Offset);
-        Assert.Equal(From, statement.From);
+        Assert.Throws<ArgumentException>(() => Calculator().Add(Stored(1, 10m, From, currency: "USD")));
+        Assert.Throws<ArgumentException>(() => Calculator().Add(Stored(2, 10m, From, accountId: "ACC2")));
     }
 }

@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Repository tests against a real SQL Server go here once MovementRepository is implemented. -->
+  <!--
+    Integration tests:
+    - Grpc/: the real gRPC host started in memory (WebApplicationFactory) and called through a generated client,
+      with an in-memory repository in place of the database.
+    - Repository tests against a real SQL Server go here once MovementRepository is implemented.
+  -->
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,12 +13,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!--
+      CS0436: the client below is generated from the same .proto as the server, so its message types also exist in the
+      referenced CashMovements.Grpc assembly. The compiler uses the local (client-side) copies, which is what we want.
+    -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.57.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.57.0" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,8 +34,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Protobuf Include="..\CashMovements.Grpc\Protos\cash_movements.proto" GrpcServices="Client" Link="Protos\cash_movements.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CashMovements.Domain\CashMovements.Domain.csproj" />
     <ProjectReference Include="..\CashMovements.Infrastructure\CashMovements.Infrastructure.csproj" />
+    <ProjectReference Include="..\CashMovements.Grpc\CashMovements.Grpc.csproj" />
   </ItemGroup>
 
 </Project>

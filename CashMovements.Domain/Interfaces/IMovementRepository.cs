@@ -5,8 +5,10 @@ namespace CashMovements.Domain.Interfaces;
 
 /// <summary>
 /// Data access for movements. Deliberately thin: it stores and fetches movements and sums amounts.
-/// Balances and statements are assembled by the domain (<see cref="ReadModels.Statement.Build"/>)
-/// so the rules stay testable without a database.
+/// Balances and statements are assembled above it, so the rules stay testable without a database.
+/// <para>
+/// Naming: <c>Find…</c> may return null, <c>Add…</c> inserts, <c>Sum…</c> aggregates, <c>Stream…</c> yields rows lazily.
+/// </para>
 /// </summary>
 public interface IMovementRepository
 {
@@ -14,7 +16,7 @@ public interface IMovementRepository
     /// Finds the movement recorded on <paramref name="accountId"/> under <paramref name="externalRef"/>,
     /// or null if none exists. External references are unique per account.
     /// </summary>
-    Task<Movement?> GetByExternalReferenceAsync(
+    Task<Movement?> FindByExternalRefAsync(
         AccountId accountId,
         ExternalRef externalRef,
         CancellationToken cancellationToken);
@@ -22,19 +24,28 @@ public interface IMovementRepository
     /// <summary>Inserts a new movement and returns it with its database-assigned <see cref="Movement.Id"/>.</summary>
     Task<Movement> AddAsync(Movement movement, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Sums the signed amounts for the account and currency. With <paramref name="before"/> set, only movements
-    /// that occurred strictly before it are included (a statement's opening balance); otherwise all movements
-    /// (the current balance). Returns 0 when there are none.
-    /// </summary>
-    Task<decimal> SumAsync(
+    /// <summary>Sum of all signed amounts for the account and currency (the current balance). 0 when there are none.</summary>
+    Task<decimal> SumAmountsAsync(
         AccountId accountId,
         Currency currency,
-        DateTimeOffset? before,
         CancellationToken cancellationToken);
 
-    /// <summary>Lists movements for the account and currency that occurred in [<paramref name="from"/>, <paramref name="to"/>).</summary>
-    Task<IReadOnlyList<Movement>> ListAsync(
+    /// <summary>
+    /// Sum of signed amounts for movements that occurred strictly before <paramref name="before"/>
+    /// (a statement's opening balance). 0 when there are none.
+    /// </summary>
+    Task<decimal> SumAmountsBeforeAsync(
+        AccountId accountId,
+        Currency currency,
+        DateTimeOffset before,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Streams movements for the account and currency that occurred in [<paramref name="from"/>, <paramref name="to"/>),
+    /// ordered by <see cref="Movement.OccurredAt"/> then <see cref="Movement.Id"/>. Rows are yielded as they are read,
+    /// so a large period is never held in memory.
+    /// </summary>
+    IAsyncEnumerable<Movement> StreamInPeriodAsync(
         AccountId accountId,
         Currency currency,
         DateTimeOffset from,

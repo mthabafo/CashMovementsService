@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package cashmovements.v1;
+
+// Generated types live in their own namespace so they never collide with the domain's Movement,
+// StatementHeader and StatementLine. Code refers to them through a `Proto` alias.
+option csharp_namespace = "CashMovements.Grpc.Contracts";
+
+import "google/protobuf/timestamp.proto";
+
+// Conventions
+// - Amounts are decimal strings: signed (+ credit, - debit), '.' as the decimal separator, at most 2 decimal places.
+//   Responses always use exactly 2 decimal places, e.g. "-250.75", "100.00".
+// - Currency is a separate ISO 4217 code, e.g. "ZAR".
+// - Timestamps are UTC.
+// - Errors are gRPC status codes: INVALID_ARGUMENT (bad input), ALREADY_EXISTS (external ref reused with a
+//   different amount or currency), INTERNAL (anything unexpected).
+service Movements {
+  rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
+
+  // Streams exactly one header, then zero or more lines in order, then exactly one footer.
+  // If the call fails part-way, the stream ends with an error status and no footer: discard the partial statement.
+  rpc GetStatement (GetStatementRequest) returns (stream GetStatementResponse);
+
+  // Idempotent per (account_id, external_ref): a retry with the same amount and currency returns the original movement.
+  rpc RecordMovement (RecordMovementRequest) returns (RecordMovementResponse);
+}
+
+// ---------- Shared ----------
+
+message Movement {
+  int64 id = 1;
+  string account_id = 2;
+  string external_ref = 3;
+  string amount = 4;
+  string currency = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  google.protobuf.Timestamp recorded_at = 7;
+  optional string narration = 8;
+}
+
+// ---------- GetBalance ----------
+
+message GetBalanceRequest {
+  string account_id = 1;
+  string currency = 2;
+}
+
+message GetBalanceResponse {
+  string account_id = 1;
+  string currency = 2;
+  string amount = 3;
+  google.protobuf.Timestamp as_at = 4;
+}
+
+// ---------- GetStatement ----------
+
+message GetStatementRequest {
+  string account_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp from = 3; // inclusive
+  google.protobuf.Timestamp to = 4;   // exclusive
+}
+
+message GetStatementResponse {
+  oneof item {
+    StatementHeader header = 1;
+    StatementLine line = 2;
+    StatementFooter footer = 3;
+  }
+}
+
+message StatementHeader {
+  string account_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  string opening_balance = 5;
+}
+
+message StatementLine {
+  Movement movement = 1;
+  string running_balance = 2;
+}
+
+message StatementFooter {
+  string closing_balance = 1;
+  int32 line_count = 2;
+}
+
+// ---------- RecordMovement ----------
+
+message RecordMovementRequest {
+  string account_id = 1;
+  string external_ref = 2;
+  string amount = 3;
+  string currency = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  optional string narration = 6;
+}
+
+message RecordMovementResponse {
+  Movement movement = 1;
+}

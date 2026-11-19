@@ -1,4 +1,5 @@
-﻿using CashMovements.Application.Interfaces;
+﻿using System.Runtime.CompilerServices;
+using CashMovements.Application.Interfaces;
 using CashMovements.Domain.Entities;
 using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.Interfaces;
@@ -26,12 +27,12 @@ public sealed class MovementService : IMovementService
         var account = AccountId.From(accountId);
         var ccy = Currency.From(currency);
 
-        var amount = await _repository.SumAsync(account, ccy, before: null, cancellationToken);
+        var amount = await _repository.SumAmountsAsync(account, ccy, cancellationToken);
 
         return new Balance(account, ccy, amount, _clock.GetUtcNow());
     }
 
-    public async Task<Statement> GetStatementAsync(
+    public async Task<StatementStream> GetStatementAsync(
         string accountId,
         string currency,
         DateTimeOffset from,
@@ -41,14 +42,13 @@ public sealed class MovementService : IMovementService
         var account = AccountId.From(accountId);
         var ccy = Currency.From(currency);
 
-        // Fail fast before touching the database; Statement.Build enforces the same rule.
-        if (from >= to)
-            throw new InvalidValueException("Statement period start must be before its end.");
+        // Fail fast before touching the database.
+        StatementHeader.EnsureValidPeriod(from, to);
 
-        var openingBalance = await _repository.SumAsync(account, ccy, before: from, cancellationToken);
-        var movements = await _repository.ListAsync(account, ccy, from, to, cancellationToken);
+        var openingBalance = await _repository.SumAmountsBeforeAsync(account, ccy, from, cancellationToken);
+        var header = StatementHeader.Create(account, ccy, from, to, openingBalance);
 
-        return Statement.Build(account, ccy, from, to, openingBalance, movements);
+        return new StatementStream(header, StreamLinesAsync(header, cancellationToken));
     }
 
     public async Task<Movement> RecordMovementAsync(
@@ -57,7 +57,7 @@ public sealed class MovementService : IMovementService
     {
         ArgumentNullException.ThrowIfNull(movement);
 
-        var existing = await _repository.GetByExternalReferenceAsync(
+        var existing = await _repository.FindByExternalRefAsync(
             movement.AccountId,
             movement.ExternalRef,
             cancellationToken);
@@ -71,5 +71,18 @@ public sealed class MovementService : IMovementService
         }
 
         return await _repository.AddAsync(movement, cancellationToken);
+    }
+
+    private async IAsyncEnumerable<StatementLine> StreamLinesAsync(
+        StatementHeader header,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var calculator = new StatementCalculator(header);
+
+        var movements = _repository.StreamInPeriodAsync(
+            header.AccountId, header.Currency, header.From, header.To, cancellationToken);
+
+        await foreach (var movement in movements.WithCancellation(cancellationToken))
+            yield return calculator.Add(movement);
     }
 }
