@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CashMovements.Domain\CashMovements.Domain.csproj" />
+    <ProjectReference Include="..\CashMovements.Application\CashMovements.Application.csproj" />
   </ItemGroup>
 
 </Project>

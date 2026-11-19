@@ -10,15 +10,17 @@ namespace CashMovements.Domain.Interfaces;
 /// </summary>
 public interface IMovementRepository
 {
-    /// <summary>Finds the movement recorded under <paramref name="externalRef"/>, or null if none exists.</summary>
-    Task<Movement?> FindByExternalRefAsync(ExternalRef externalRef, CancellationToken cancellationToken);
-
     /// <summary>
-    /// Inserts a new movement and returns it with its database-assigned <see cref="Movement.Id"/>.
-    /// Returns null when the unique index on ExternalRef rejects the insert (another request recorded the
-    /// same ref first); the caller should then re-read it with <see cref="FindByExternalRefAsync"/>.
+    /// Finds the movement recorded on <paramref name="accountId"/> under <paramref name="externalRef"/>,
+    /// or null if none exists. External references are unique per account.
     /// </summary>
-    Task<Movement?> TryAddAsync(Movement movement, CancellationToken cancellationToken);
+    Task<Movement?> GetByExternalReferenceAsync(
+        AccountId accountId,
+        ExternalRef externalRef,
+        CancellationToken cancellationToken);
+
+    /// <summary>Inserts a new movement and returns it with its database-assigned <see cref="Movement.Id"/>.</summary>
+    Task<Movement> AddAsync(Movement movement, CancellationToken cancellationToken);
 
     /// <summary>
     /// Sums the signed amounts for the account and currency. With <paramref name="before"/> set, only movements

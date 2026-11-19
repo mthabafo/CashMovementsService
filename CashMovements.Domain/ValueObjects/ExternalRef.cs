@@ -3,7 +3,7 @@ using CashMovements.Domain.Exceptions;
 namespace CashMovements.Domain.ValueObjects;
 
 /// <summary>
-/// The caller's reference for a movement. Unique across the whole system and used as the idempotency key.
+/// The caller's reference for a movement. Unique per account and used, with the account, as the idempotency key.
 /// Trimmed, non-blank, at most <see cref="MaxLength"/> characters.
 /// </summary>
 public sealed record ExternalRef
