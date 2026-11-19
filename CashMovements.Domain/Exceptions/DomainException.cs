@@ -1,14 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace CashMovements.Domain.Exceptions;
 
-namespace CashMovements.Domain.Exceptions
+/// <summary>Base type for every rule violation raised by the domain.</summary>
+public abstract class DomainException : Exception
 {
-    public class DomainException : Exception
-    {
-        public DomainException(string message)
+    protected DomainException(string message)
         : base(message)
-        {
-        }
+    {
     }
 }

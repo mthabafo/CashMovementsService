@@ -11,7 +11,7 @@
     <Project Path="CashMovements/CashMovements.Grpc.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="CashMovements.IntegrationTests/CashMovements.IntegrationTests.csproj" Id="b20421fb-29df-4d0d-aa40-c36b6713064b" />
-    <Project Path="UnitTestProject1/CashMovements.UnitTests.csproj" Id="607a8d55-518d-4cbd-a91b-26739687151c" />
+    <Project Path="CashMovements.IntegrationTests/CashMovements.IntegrationTests.csproj" />
+    <Project Path="CashMovements.UnitTests/CashMovements.UnitTests.csproj" />
   </Folder>
 </Solution>

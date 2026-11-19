@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace CashMovements.Application.Services
+namespace CashMovements.Application.Interfaces
 {
-    internal class StatementService
+    internal interface IBalanceService
     {
     }
 }

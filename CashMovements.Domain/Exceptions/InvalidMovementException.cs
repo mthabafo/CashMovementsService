@@ -1,15 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace CashMovements.Domain.Exceptions;
 
-namespace CashMovements.Domain.Exceptions
+/// <summary>A movement breaks one of its own rules (zero amount, too many decimals, future date, ...).</summary>
+public sealed class InvalidMovementException : DomainException
 {
-    public sealed class InvalidMovementException
-    : DomainException
+    public InvalidMovementException(string message)
+        : base(message)
     {
-        public InvalidMovementException(string message)
-            : base(message)
-        {
-        }
     }
 }
