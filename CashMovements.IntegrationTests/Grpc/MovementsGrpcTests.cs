@@ -160,6 +160,30 @@ public sealed class MovementsGrpcTests : IDisposable
         Assert.Equal(0, _host.Repository.OpenSources);
     }
 
+    // ---------- gRPC-Web (used by the .NET Framework WCF gateway) ----------
+
+    [Fact]
+    public async Task GetBalance_works_over_grpc_web()
+    {
+        await Client.RecordMovementAsync(Request("R1", "120.25", daysAgo: 1));
+        var webClient = _host.CreateGrpcWebClient();
+
+        var balance = await webClient.GetBalanceAsync(new Proto.GetBalanceRequest { AccountId = "ACC1", Currency = "ZAR" });
+
+        Assert.Equal("120.25", balance.Amount);
+    }
+
+    [Fact]
+    public async Task Errors_keep_their_status_code_over_grpc_web()
+    {
+        var webClient = _host.CreateGrpcWebClient();
+
+        var status = await StatusOf(async () =>
+            await webClient.GetBalanceAsync(new Proto.GetBalanceRequest { AccountId = "ACC1", Currency = "RAND" }));
+
+        Assert.Equal(StatusCode.InvalidArgument, status);
+    }
+
     // ---------- Helpers ----------
 
     private static Proto.RecordMovementRequest Request(

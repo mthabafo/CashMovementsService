@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "Balance ACC-1001 ZAR": {
+      "commandName": "Project",
+      "commandLineArgs": "ACC-1001 ZAR --wait"
+    }
+  }
+}

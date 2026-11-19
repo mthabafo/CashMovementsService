@@ -22,7 +22,8 @@ The server and the interactive client start together. **Server + Client demo** r
 This builds, starts the server, opens the interactive client, and stops the server when you type `exit`.
 Pass a command to run just that and exit, for example `.\test.ps1 demo` or `.\test.ps1 balance ACC-1001 ZAR`.
 Server output goes to a log file whose path is printed at start. If a server is already running on port 5145,
-the script uses it and leaves it running.
+the script uses it and leaves it running. `.\test.ps1 -Legacy` does the same for the WCF gateway
+(see [CashMovements.Wcf/README.md](../CashMovements.Wcf/README.md)).
 
 If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -File .\test.ps1`.
 

@@ -28,5 +28,24 @@
         "DebugTarget": "Demo"
       }
     ]
+  },
+  {
+    "Name": "Server + WCF gateway + legacy client",
+    "Projects": [
+      {
+        "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      },
+      {
+        "Path": "CashMovements.Wcf\\CashMovements.Wcf.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "CashMovements.Wcf.Client\\CashMovements.Wcf.Client.csproj",
+        "Action": "Start",
+        "DebugTarget": "Balance ACC-1001 ZAR"
+      }
+    ]
   }
 ]

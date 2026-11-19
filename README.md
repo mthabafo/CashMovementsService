@@ -7,6 +7,21 @@
 
 Either way the local database is set up automatically. See [CashMovements.Client/README.md](CashMovements.Client/README.md).
 
+## Legacy WCF gateway
+
+A .NET Framework 4.8 WCF (NetTcp) service that returns an account's current balance by calling the gRPC service.
+
+- **Visual Studio:** pick the **Server + WCF gateway + legacy client** launch profile and press F5.
+- **Command line:** `.\test.ps1 -Legacy` (or `.\test.ps1 -Legacy ACC-2002 ZAR`).
+
+Run instructions, ports and configuration are in [CashMovements.Wcf/README.md](CashMovements.Wcf/README.md).
+
+| Port | Service |
+|---|---|
+| 5145 | gRPC (HTTP/2) |
+| 5146 | gRPC-Web (HTTP/1.1), used by the WCF gateway |
+| 8095 | WCF gateway (net.tcp) |
+
 ## Automated tests
 
 ```powershell

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Legacy console client for manual testing of the WCF gateway (CashMovements.Wcf).
+    It compiles the gateway's contract files directly (linked below) instead of referencing the host,
+    the same way CashMovements.Client uses the .proto file.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CashMovements.Wcf.Client</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\CashMovements.Wcf\Contracts\*.cs" Link="Contracts\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

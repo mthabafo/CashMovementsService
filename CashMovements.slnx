@@ -9,13 +9,16 @@
     <Project Path="CashMovements.Domain/CashMovements.Domain.csproj" />
     <Project Path="CashMovements.Infrastructure/CashMovements.Infrastructure.csproj" />
     <Project Path="CashMovements.Grpc/CashMovements.Grpc.csproj" />
+    <Project Path="CashMovements.Wcf/CashMovements.Wcf.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="CashMovements.IntegrationTests/CashMovements.IntegrationTests.csproj" />
     <Project Path="CashMovements.UnitTests/CashMovements.UnitTests.csproj" />
+    <Project Path="CashMovements.Wcf.Tests/CashMovements.Wcf.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="CashMovements.Client/CashMovements.Client.csproj" />
+    <Project Path="CashMovements.Wcf.Client/CashMovements.Wcf.Client.csproj" />
     <File Path="CashMovements.slnLaunch" />
     <File Path="test.ps1" />
   </Folder>

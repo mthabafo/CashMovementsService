@@ -1,5 +1,7 @@
 using CashMovements.Domain.Interfaces;
+using System.Net;
 using Grpc.Net.Client;
+using Grpc.Net.Client.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +20,7 @@ internal sealed class GrpcTestHost : IDisposable
     private readonly WebApplicationFactory<Program> _factory;
     private readonly GrpcChannel _channel;
     private readonly InMemoryMovementRepository? _repository;
+    private readonly List<GrpcChannel> _extraChannels = [];
 
     public GrpcTestHost(string? sqlConnectionString = null)
     {
@@ -55,8 +58,22 @@ internal sealed class GrpcTestHost : IDisposable
 
     public Proto.Movements.MovementsClient Client { get; }
 
+    /// <summary>A client that speaks gRPC-Web over HTTP/1.1, as the .NET Framework WCF gateway does.</summary>
+    public Proto.Movements.MovementsClient CreateGrpcWebClient()
+    {
+        var handler = new GrpcWebHandler(GrpcWebMode.GrpcWeb, _factory.Server.CreateHandler())
+        {
+            HttpVersion = HttpVersion.Version11,
+        };
+        var channel = GrpcChannel.ForAddress(_factory.Server.BaseAddress, new GrpcChannelOptions { HttpHandler = handler });
+        _extraChannels.Add(channel);
+        return new Proto.Movements.MovementsClient(channel);
+    }
+
     public void Dispose()
     {
+        foreach (var channel in _extraChannels)
+            channel.Dispose();
         _channel.Dispose();
         _factory.Dispose();
     }

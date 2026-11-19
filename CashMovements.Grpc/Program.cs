@@ -38,7 +38,10 @@ if (app.Configuration.GetValue<bool>("Database:AutoSetup"))
         string.Join(", ", scripts.Select(Path.GetFileName)));
 }
 
-app.MapGrpcService<MovementGrpcService>();
+// Ports are set in appsettings.json (Kestrel:Endpoints): 5145 is gRPC over HTTP/2; 5146 is HTTP/1.1 for gRPC-Web,
+// which clients that can't do HTTP/2 without TLS use, such as the .NET Framework WCF gateway (CashMovements.Wcf).
+app.UseGrpcWeb();
+app.MapGrpcService<MovementGrpcService>().EnableGrpcWeb();
 app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 
 app.Run();
