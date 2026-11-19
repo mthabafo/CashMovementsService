@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using CashMovements.Domain.Entities;
 using CashMovements.Domain.Interfaces;
+using CashMovements.Domain.ReadModels;
 using CashMovements.Domain.ValueObjects;
 
 namespace CashMovements.UnitTests.Application;
@@ -14,6 +15,12 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
 
     public int AddCalls { get; private set; }
 
+    public int OpenCalls { get; private set; }
+
+    /// <summary>Statement sources opened and not yet disposed.</summary>
+    public int OpenSources { get; private set; }
+
+    /// <summary>Times the statement movements were actually enumerated (proves laziness).</summary>
     public int StreamCalls { get; private set; }
 
     /// <summary>Seeds an already-persisted movement directly, bypassing the service.</summary>
@@ -32,7 +39,6 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
             movement.Amount,
             movement.Currency.Code,
             movement.OccurredAt,
-            movement.RecordedAt,
             movement.Narration);
         _movements.Add(stored);
         return Task.FromResult(stored);
@@ -41,24 +47,32 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
     public Task<decimal> SumAmountsAsync(AccountId accountId, Currency currency, CancellationToken cancellationToken)
         => Task.FromResult(For(accountId, currency).Sum(m => m.Amount));
 
-    public Task<decimal> SumAmountsBeforeAsync(AccountId accountId, Currency currency, DateTimeOffset before, CancellationToken cancellationToken)
-        => Task.FromResult(For(accountId, currency).Where(m => m.OccurredAt < before).Sum(m => m.Amount));
-
-    public async IAsyncEnumerable<Movement> StreamInPeriodAsync(
+    public Task<StatementSource> OpenStatementAsync(
         AccountId accountId,
         Currency currency,
         DateTimeOffset from,
         DateTimeOffset to,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
-        StreamCalls++;
+        OpenCalls++;
+        OpenSources++;
 
-        // Same ordering contract as the real query: ORDER BY OccurredAt, Id.
+        // Snapshot now, like the real repository: later inserts don't change this statement.
+        var opening = For(accountId, currency).Where(m => m.OccurredAt < from).Sum(m => m.Amount);
         var rows = For(accountId, currency)
             .Where(m => m.OccurredAt >= from && m.OccurredAt < to)
-            .OrderBy(m => m.OccurredAt)
+            .OrderBy(m => m.OccurredAt)   // same ordering contract as the real query: ORDER BY OccurredAt, Id
             .ThenBy(m => m.Id)
             .ToList();
+
+        return Task.FromResult(new StatementSource(opening, Stream(rows), new Release(() => OpenSources--)));
+    }
+
+    private async IAsyncEnumerable<Movement> Stream(
+        List<Movement> rows,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        StreamCalls++;
 
         foreach (var row in rows)
         {
@@ -70,4 +84,13 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
 
     private IEnumerable<Movement> For(AccountId accountId, Currency currency)
         => _movements.Where(m => m.AccountId == accountId && m.Currency == currency);
+
+    private sealed class Release(Action onDispose) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            onDispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }

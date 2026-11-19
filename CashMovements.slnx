@@ -14,4 +14,7 @@
     <Project Path="CashMovements.IntegrationTests/CashMovements.IntegrationTests.csproj" />
     <Project Path="CashMovements.UnitTests/CashMovements.UnitTests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="CashMovements.Client/CashMovements.Client.csproj" />
+  </Folder>
 </Solution>

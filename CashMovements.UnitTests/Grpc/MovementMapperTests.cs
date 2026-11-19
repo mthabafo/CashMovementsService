@@ -107,7 +107,7 @@ public class MovementMapperTests
     [Fact]
     public void Movement_maps_to_proto_with_formatted_amount()
     {
-        var movement = Movement.Rehydrate(7, "ACC1", "REF-1", 12.5m, "ZAR", Now.AddDays(-1), Now, null);
+        var movement = Movement.Rehydrate(7, "ACC1", "REF-1", 12.5m, "ZAR", Now.AddDays(-1), null);
 
         var proto = MovementMapper.ToProto(movement);
 

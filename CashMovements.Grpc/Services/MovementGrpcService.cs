@@ -39,7 +39,8 @@ public sealed class MovementGrpcService : Proto.Movements.MovementsBase
     {
         var cancellationToken = context.CancellationToken;
 
-        var statement = await _movements.GetStatementAsync(
+        // Holds the database snapshot open until the last line is written (or the call fails / is cancelled).
+        await using var statement = await _movements.GetStatementAsync(
             request.AccountId,
             request.Currency,
             MovementMapper.ToDateTimeOffset(request.From, "from"),

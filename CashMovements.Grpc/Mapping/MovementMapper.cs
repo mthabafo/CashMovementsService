@@ -75,7 +75,6 @@ public static class MovementMapper
             Amount = FormatAmount(movement.Amount),
             Currency = movement.Currency.Code,
             OccurredAt = Timestamp.FromDateTimeOffset(movement.OccurredAt),
-            RecordedAt = Timestamp.FromDateTimeOffset(movement.RecordedAt),
         };
 
         if (movement.Narration is not null)

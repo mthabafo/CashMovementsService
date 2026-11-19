@@ -45,10 +45,18 @@ public sealed class MovementService : IMovementService
         // Fail fast before touching the database.
         StatementHeader.EnsureValidPeriod(from, to);
 
-        var openingBalance = await _repository.SumAmountsBeforeAsync(account, ccy, from, cancellationToken);
-        var header = StatementHeader.Create(account, ccy, from, to, openingBalance);
+        var source = await _repository.OpenStatementAsync(account, ccy, from, to, cancellationToken);
+        try
+        {
+            var header = StatementHeader.Create(account, ccy, from, to, source.OpeningBalance);
 
-        return new StatementStream(header, StreamLinesAsync(header, cancellationToken));
+            return new StatementStream(header, StreamLinesAsync(header, source.Movements, cancellationToken), source);
+        }
+        catch
+        {
+            await source.DisposeAsync();
+            throw;
+        }
     }
 
     public async Task<Movement> RecordMovementAsync(
@@ -73,14 +81,12 @@ public sealed class MovementService : IMovementService
         return await _repository.AddAsync(movement, cancellationToken);
     }
 
-    private async IAsyncEnumerable<StatementLine> StreamLinesAsync(
+    private static async IAsyncEnumerable<StatementLine> StreamLinesAsync(
         StatementHeader header,
+        IAsyncEnumerable<Movement> movements,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var calculator = new StatementCalculator(header);
-
-        var movements = _repository.StreamInPeriodAsync(
-            header.AccountId, header.Currency, header.From, header.To, cancellationToken);
 
         await foreach (var movement in movements.WithCancellation(cancellationToken))
             yield return calculator.Add(movement);

@@ -13,7 +13,7 @@ public class StatementTests
     private static readonly Currency Zar = Currency.From("ZAR");
 
     private static Movement Stored(long id, decimal amount, DateTimeOffset occurredAt, string currency = "ZAR", string accountId = "ACC1")
-        => Movement.Rehydrate(id, accountId, $"REF-{id}", amount, currency, occurredAt, occurredAt, null);
+        => Movement.Rehydrate(id, accountId, $"REF-{id}", amount, currency, occurredAt, null);
 
     private static StatementCalculator Calculator(decimal opening = 0m)
         => new(StatementHeader.Create(Account, Zar, From, To, opening));

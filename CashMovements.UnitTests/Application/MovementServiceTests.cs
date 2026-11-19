@@ -3,6 +3,7 @@ using CashMovements.Application;
 using CashMovements.Domain.Entities;
 using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.Interfaces;
+using CashMovements.Domain.ReadModels;
 using CashMovements.Domain.ValueObjects;
 
 namespace CashMovements.UnitTests.Application;
@@ -135,7 +136,7 @@ public class MovementServiceTests
         await _service.RecordMovementAsync(New(-200m, "R2", occurredAt: from.AddDays(1)), default);
         await _service.RecordMovementAsync(New(7m, "R4", occurredAt: to), default);                   // after period (exclusive end)
 
-        var statement = await _service.GetStatementAsync("ACC1", "ZAR", from, to, default);
+        await using var statement = await _service.GetStatementAsync("ACC1", "ZAR", from, to, default);
         var lines = await ToListAsync(statement.Lines);
 
         Assert.Equal(1000m, statement.Header.OpeningBalance);
@@ -146,7 +147,7 @@ public class MovementServiceTests
     [Fact]
     public async Task Statement_lines_are_not_read_until_enumerated()
     {
-        var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-1), Now, default);
+        await using var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-1), Now, default);
 
         Assert.Equal(0, _repository.StreamCalls);
 
@@ -160,7 +161,7 @@ public class MovementServiceTests
     {
         await _service.RecordMovementAsync(New(40m, "R1", occurredAt: Now.AddDays(-20)), default);
 
-        var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-10), Now, default);
+        await using var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-10), Now, default);
 
         Assert.Equal(40m, statement.Header.OpeningBalance);
         Assert.Empty(await ToListAsync(statement.Lines));
@@ -171,7 +172,7 @@ public class MovementServiceTests
     {
         // Guards the ordering contract: a buggy query must not silently produce wrong running balances.
         var service = new MovementService(new UnorderedRepository(), Clock);
-        var statement = await service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-10), Now, default);
+        await using var statement = await service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-10), Now, default);
 
         await Assert.ThrowsAsync<ArgumentException>(() => ToListAsync(statement.Lines));
     }
@@ -182,7 +183,34 @@ public class MovementServiceTests
         await Assert.ThrowsAsync<InvalidValueException>(
             () => _service.GetStatementAsync("ACC1", "ZAR", Now, Now.AddDays(-1), default));
 
-        Assert.Equal(0, _repository.StreamCalls);
+        Assert.Equal(0, _repository.OpenCalls);
+    }
+
+    [Fact]
+    public async Task Statement_reads_opening_balance_and_lines_from_one_snapshot()
+    {
+        await _service.RecordMovementAsync(New(10m, "R1", occurredAt: Now.AddDays(-5)), default);
+
+        await using var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-10), Now, default);
+
+        // Inserted after the statement was opened, inside the period: must not appear.
+        await _service.RecordMovementAsync(New(99m, "R2", occurredAt: Now.AddDays(-4)), default);
+        var lines = await ToListAsync(statement.Lines);
+
+        Assert.Equal(1, _repository.OpenCalls);
+        Assert.Equal(new[] { "R1" }, lines.Select(l => l.Movement.ExternalRef.Value));
+    }
+
+    [Fact]
+    public async Task Disposing_the_statement_releases_the_snapshot_even_if_lines_were_never_read()
+    {
+        var statement = await _service.GetStatementAsync("ACC1", "ZAR", Now.AddDays(-1), Now, default);
+        Assert.Equal(1, _repository.OpenSources);
+
+        await statement.DisposeAsync();
+        await statement.DisposeAsync(); // idempotent
+
+        Assert.Equal(0, _repository.OpenSources);
     }
 
     private static async Task<List<T>> ToListAsync<T>(IAsyncEnumerable<T> source)
@@ -199,13 +227,15 @@ public class MovementServiceTests
         public Task<Movement?> FindByExternalRefAsync(AccountId a, ExternalRef r, CancellationToken ct) => Task.FromResult<Movement?>(null);
         public Task<Movement> AddAsync(Movement m, CancellationToken ct) => Task.FromResult(m);
         public Task<decimal> SumAmountsAsync(AccountId a, Currency c, CancellationToken ct) => Task.FromResult(0m);
-        public Task<decimal> SumAmountsBeforeAsync(AccountId a, Currency c, DateTimeOffset before, CancellationToken ct) => Task.FromResult(0m);
 
-        public async IAsyncEnumerable<Movement> StreamInPeriodAsync(AccountId a, Currency c, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct)
+        public Task<StatementSource> OpenStatementAsync(AccountId a, Currency c, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+            => Task.FromResult(new StatementSource(0m, Rows()));
+
+        private static async IAsyncEnumerable<Movement> Rows()
         {
             await Task.Yield();
-            yield return Movement.Rehydrate(2, "ACC1", "R2", 1m, "ZAR", Now.AddDays(-1), Now, null);
-            yield return Movement.Rehydrate(1, "ACC1", "R1", 1m, "ZAR", Now.AddDays(-2), Now, null);
+            yield return Movement.Rehydrate(2, "ACC1", "R2", 1m, "ZAR", Now.AddDays(-1), null);
+            yield return Movement.Rehydrate(1, "ACC1", "R1", 1m, "ZAR", Now.AddDays(-2), null);
         }
     }
 }

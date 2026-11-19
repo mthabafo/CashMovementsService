@@ -117,6 +117,7 @@ public sealed class MovementsGrpcTests : IDisposable
         Assert.Equal(new[] { "800.00", "850.50" }, items.Where(i => i.ItemCase == ItemCase.Line).Select(i => i.Line.RunningBalance));
         Assert.Equal("850.50", items[^1].Footer.ClosingBalance);
         Assert.Equal(2, items[^1].Footer.LineCount);
+        Assert.Equal(0, _host.Repository.OpenSources);
     }
 
     [Fact]
@@ -156,6 +157,7 @@ public sealed class MovementsGrpcTests : IDisposable
         Assert.Equal(StatusCode.Internal, ex.StatusCode);
         Assert.DoesNotContain("secret", ex.Status.Detail);
         Assert.Equal(new[] { ItemCase.Header, ItemCase.Line }, received.Select(i => i.ItemCase));
+        Assert.Equal(0, _host.Repository.OpenSources);
     }
 
     // ---------- Helpers ----------

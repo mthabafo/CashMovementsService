@@ -4,7 +4,9 @@
     Integration tests:
     - Grpc/: the real gRPC host started in memory (WebApplicationFactory) and called through a generated client,
       with an in-memory repository in place of the database.
-    - Repository tests against a real SQL Server go here once MovementRepository is implemented.
+    - Repository/: MovementRepository against a real SQL Server, built from the repo's 001/002 scripts.
+      Uses the local default SQL Server instance; set CASHMOVEMENTS_TEST_SQLSERVER to use another
+      server (see Support/SqlServerFixture.cs).
   -->
 
   <PropertyGroup>
@@ -35,6 +37,11 @@
 
   <ItemGroup>
     <Protobuf Include="..\CashMovements.Grpc\Protos\cash_movements.proto" GrpcServices="Client" Link="Protos\cash_movements.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same scripts a real deployment runs, copied next to the tests. -->
+    <None Include="..\001_schema.sql;..\002_procedures.sql" Link="Database\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

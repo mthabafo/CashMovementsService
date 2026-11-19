@@ -35,7 +35,8 @@ message Movement {
   string amount = 4;
   string currency = 5;
   google.protobuf.Timestamp occurred_at = 6;
-  google.protobuf.Timestamp recorded_at = 7;
+  reserved 7;
+  reserved "recorded_at";
   optional string narration = 8;
 }
 

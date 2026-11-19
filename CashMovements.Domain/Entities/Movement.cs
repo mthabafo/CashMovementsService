@@ -26,7 +26,6 @@ public sealed class Movement
         decimal amount,
         Currency currency,
         DateTimeOffset occurredAt,
-        DateTimeOffset recordedAt,
         string? narration)
     {
         Id = id;
@@ -35,7 +34,6 @@ public sealed class Movement
         Amount = amount;
         Currency = currency;
         OccurredAt = occurredAt;
-        RecordedAt = recordedAt;
         Narration = narration;
     }
 
@@ -54,9 +52,6 @@ public sealed class Movement
     /// <summary>When the movement happened (UTC). Drives statement ordering and periods.</summary>
     public DateTimeOffset OccurredAt { get; private set; }
 
-    /// <summary>When this system recorded the movement (UTC).</summary>
-    public DateTimeOffset RecordedAt { get; private set; }
-
     /// <summary>Optional free text, at most <see cref="MaxNarrationLength"/> characters. Blank is stored as null.</summary>
     public string? Narration { get; private set; }
 
@@ -65,7 +60,7 @@ public sealed class Movement
     public bool IsDebit => Amount < 0;
 
     /// <summary>Creates a new, not-yet-persisted movement and enforces every rule.</summary>
-    /// <param name="clock">Supplies "now" for <see cref="RecordedAt"/> and the future-date check.</param>
+    /// <param name="clock">Supplies "now" for the future-date check.</param>
     public static Movement Create(
         string accountId,
         string externalRef,
@@ -94,7 +89,6 @@ public sealed class Movement
             amount,
             Currency.From(currency),
             occurredUtc,
-            recordedAt: now,
             NormaliseNarration(narration));
     }
 
@@ -109,7 +103,6 @@ public sealed class Movement
         decimal amount,
         string currency,
         DateTimeOffset occurredAt,
-        DateTimeOffset recordedAt,
         string? narration)
     {
         if (id <= 0)
@@ -122,14 +115,13 @@ public sealed class Movement
             amount,
             Currency.From(currency),
             occurredAt.ToUniversalTime(),
-            recordedAt.ToUniversalTime(),
             NormaliseNarration(narration));
     }
 
     /// <summary>
     /// True when <paramref name="other"/> carries the same business payload. Used for idempotency: the same
     /// <see cref="ExternalRef"/> with the same payload is a replay; with a different payload it is a conflict.
-    /// <see cref="Id"/> and <see cref="RecordedAt"/> are ignored.
+    /// <see cref="Id"/> is ignored.
     /// </summary>
     public bool HasSamePayloadAs(Movement other)
     {

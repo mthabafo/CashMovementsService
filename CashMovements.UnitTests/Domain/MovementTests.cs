@@ -28,12 +28,11 @@ public class MovementTests
     }
 
     [Fact]
-    public void Create_sets_system_fields()
+    public void Create_leaves_id_unassigned()
     {
         var movement = Create();
 
         Assert.Equal(0, movement.Id);
-        Assert.Equal(Now, movement.RecordedAt);
     }
 
     [Fact]
@@ -114,19 +113,19 @@ public class MovementTests
     {
         var future = Now.AddYears(1);
 
-        var movement = Movement.Rehydrate(42, "ACC1", "REF-1", 10m, "ZAR", future, Now, null);
+        var movement = Movement.Rehydrate(42, "ACC1", "REF-1", 10m, "ZAR", future, null);
 
         Assert.Equal(42, movement.Id);
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => Movement.Rehydrate(0, "ACC1", "REF-1", 10m, "ZAR", Now, Now, null));
+            () => Movement.Rehydrate(0, "ACC1", "REF-1", 10m, "ZAR", Now, null));
     }
 
     [Fact]
-    public void Same_payload_is_detected_regardless_of_id_recorded_at_and_formatting()
+    public void Same_payload_is_detected_regardless_of_id_and_formatting()
     {
         var occurred = new DateTimeOffset(2026, 11, 18, 12, 0, 0, TimeSpan.FromHours(2));
         var incoming = Create(amount: 1.5m, currency: "zar", accountId: " ACC1 ", occurredAt: occurred);
-        var stored = Movement.Rehydrate(7, "ACC1", "REF-1", 1.50m, "ZAR", occurred.ToUniversalTime(), Now.AddHours(-3), "Deposit");
+        var stored = Movement.Rehydrate(7, "ACC1", "REF-1", 1.50m, "ZAR", occurred.ToUniversalTime(), "Deposit");
 
         Assert.True(incoming.HasSamePayloadAs(stored));
     }
