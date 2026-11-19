@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The repo's SQL scripts, copied next to the app for Database:AutoSetup (local development only). -->
+    <None Include="..\001_schema.sql;..\002_procedures.sql;..\003_seed.sql" Link="Database\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CashMovements.Application\CashMovements.Application.csproj" />
     <ProjectReference Include="..\CashMovements.Infrastructure\CashMovements.Infrastructure.csproj" />
   </ItemGroup>

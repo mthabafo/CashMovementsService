@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "Server + Client",
+    "Projects": [
+      {
+        "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      },
+      {
+        "Path": "CashMovements.Client\\CashMovements.Client.csproj",
+        "Action": "Start",
+        "DebugTarget": "Interactive"
+      }
+    ]
+  },
+  {
+    "Name": "Server + Client demo",
+    "Projects": [
+      {
+        "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
+        "Action": "Start",
+        "DebugTarget": "http"
+      },
+      {
+        "Path": "CashMovements.Client\\CashMovements.Client.csproj",
+        "Action": "Start",
+        "DebugTarget": "Demo"
+      }
+    ]
+  }
+]

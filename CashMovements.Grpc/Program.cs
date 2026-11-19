@@ -22,6 +22,22 @@ builder.Services.AddScoped<IMovementService, MovementService>();
 
 var app = builder.Build();
 
+// Local development convenience (appsettings.Development.json): create the database if it's missing and run the
+// repo's idempotent scripts (schema, procedures, seed), so there are no manual setup steps. Off unless configured.
+if (app.Configuration.GetValue<bool>("Database:AutoSetup"))
+{
+    var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSetup");
+    var scripts = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Database"), "*.sql").Order().ToList();
+
+    var created = await DatabaseSetup.EnsureDatabaseExistsAsync(connectionString);
+    await DatabaseSetup.RunScriptsAsync(connectionString, scripts);
+
+    logger.LogInformation(
+        "Database {State}; ran {Scripts}.",
+        created ? "created" : "already existed",
+        string.Join(", ", scripts.Select(Path.GetFileName)));
+}
+
 app.MapGrpcService<MovementGrpcService>();
 app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 

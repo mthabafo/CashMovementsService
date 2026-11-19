@@ -1,3 +1,4 @@
+using CashMovements.Infrastructure.Persistence;
 using Microsoft.Data.SqlClient;
 
 namespace CashMovements.IntegrationTests.Support;
@@ -28,10 +29,11 @@ public sealed class SqlServerFixture : IAsyncLifetime
     {
         var configured = Environment.GetEnvironmentVariable(ServerVariable);
         _serverConnectionString = string.IsNullOrWhiteSpace(configured) ? DefaultServer : configured;
+        ConnectionString = new SqlConnectionStringBuilder(_serverConnectionString) { InitialCatalog = _databaseName }.ConnectionString;
 
         try
         {
-            await ExecuteAsync(_serverConnectionString, $"CREATE DATABASE [{_databaseName}];");
+            await DatabaseSetup.EnsureDatabaseExistsAsync(ConnectionString);
         }
         catch (SqlException ex)
         {
@@ -40,14 +42,9 @@ public sealed class SqlServerFixture : IAsyncLifetime
                 "to a connection string (without a database) for a server you can create databases on.", ex);
         }
 
-        ConnectionString = new SqlConnectionStringBuilder(_serverConnectionString) { InitialCatalog = _databaseName }.ConnectionString;
-
-        foreach (var script in Scripts)
-        {
-            var path = Path.Combine(AppContext.BaseDirectory, "Database", script);
-            foreach (var batch in SplitOnGo(await File.ReadAllTextAsync(path)))
-                await ExecuteAsync(ConnectionString, batch);
-        }
+        await DatabaseSetup.RunScriptsAsync(
+            ConnectionString,
+            Scripts.Select(script => Path.Combine(AppContext.BaseDirectory, "Database", script)));
     }
 
     public async Task DisposeAsync()
@@ -68,28 +65,6 @@ public sealed class SqlServerFixture : IAsyncLifetime
         await connection.OpenAsync();
         await using var command = new SqlCommand(sql, connection) { CommandTimeout = 120 };
         await command.ExecuteNonQueryAsync();
-    }
-
-    /// <summary>Splits a script into batches on lines containing only GO, as sqlcmd and SSMS do.</summary>
-    private static IEnumerable<string> SplitOnGo(string script)
-    {
-        var batch = new System.Text.StringBuilder();
-        foreach (var line in script.Split('\n'))
-        {
-            if (line.Trim().Equals("GO", StringComparison.OrdinalIgnoreCase))
-            {
-                if (batch.ToString().Trim().Length > 0)
-                    yield return batch.ToString();
-                batch.Clear();
-            }
-            else
-            {
-                batch.AppendLine(line.TrimEnd('\r'));
-            }
-        }
-
-        if (batch.ToString().Trim().Length > 0)
-            yield return batch.ToString();
     }
 }
 

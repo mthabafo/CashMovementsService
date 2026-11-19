@@ -1,16 +1,17 @@
+using System.Text;
 using CashMovements.Client;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Proto = CashMovements.Grpc.Contracts;
 
 // Command-line client for manually testing the CashMovements gRPC service. See README.md.
-// Exit codes: 0 success, 1 the server returned an error (or demo found something unexpected), 2 bad command line.
+// With no command it starts an interactive prompt; with a command it runs it once and exits.
+// Exit codes (one-shot): 0 success, 1 the server returned an error (or demo found something unexpected), 2 bad command line.
 
 const string DefaultServer = "http://localhost:5145";
+const string Prompt = "cashmovements> ";
 
-const string Usage = """
-    Usage: dotnet run --project CashMovements.Client -- <command> [arguments] [--server <url>]
-
+const string CommandHelp = """
     Commands:
       balance   <account> <currency>
       record    <account> <ref> <amount> <currency> [--at <time>] [--narration <text>]
@@ -20,79 +21,227 @@ const string Usage = """
     Amounts are sent exactly as typed: signed, '.' as decimal separator (e.g. 100, -249.50).
     Times without an offset are local time; a bare date means midnight (e.g. 2026-11-01, 2026-11-01T14:30, 2026-11-01T12:30Z).
     record --at defaults to now; statement defaults to the 30 days before --to (default now).
-    --server defaults to http://localhost:5145 (the server's "http" launch profile).
+    Quote values with spaces: --narration "Card payment".
 
     Examples:
       balance ACC-1001 ZAR
       record ACC-1001 PAY-77 -149.50 ZAR --narration "Groceries"
-      statement ACC-1001 ZAR --from 2026-10-01 --to 2026-11-01
+      statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
       demo
     """;
 
-CommandLine line;
+const string Usage = $"""
+    Usage:
+      CashMovements.Client [--server <url>]                          interactive prompt
+      CashMovements.Client <command> [arguments] [--server <url>]    run one command and exit
+
+    --server defaults to {DefaultServer} (the server's "http" launch profile).
+
+    {CommandHelp}
+    """;
+
+CommandLine startup;
 try
 {
-    line = CommandLine.Parse(args);
+    startup = CommandLine.Parse(args);
 }
 catch (UsageException ex)
 {
     return UsageError(ex.Message);
 }
 
-if (line.Command is null || line.HelpRequested || line.Command is "help")
+if (startup.HelpRequested || startup.Command is "help")
 {
     Console.WriteLine(Usage);
-    return line.Command is null && !line.HelpRequested ? 2 : 0;
+    return 0;
 }
 
-var server = line.Option("server") ?? DefaultServer;
+var server = startup.Option("server") ?? DefaultServer;
 if (!Uri.TryCreate(server, UriKind.Absolute, out var serverUri))
     return UsageError($"--server '{server}' is not a URL.");
 
-using var cancellation = new CancellationTokenSource();
+// Ctrl+C cancels the command that is running; with nothing running it exits as usual.
+CancellationTokenSource? running = null;
 Console.CancelKeyPress += (_, e) =>
 {
-    e.Cancel = true; // let the call end cleanly instead of killing the process
-    cancellation.Cancel();
+    var current = running;
+    if (current is null)
+        return;
+
+    e.Cancel = true;
+    current.Cancel();
 };
 
 using var channel = GrpcChannel.ForAddress(serverUri);
-var commands = new Commands(new Proto.Movements.MovementsClient(channel), cancellation.Token);
+var client = new Proto.Movements.MovementsClient(channel);
 
-try
+if (startup.Command is not null)
 {
-    return line.Command.ToLowerInvariant() switch
+    // The demo is often launched together with the server (Visual Studio), so give the server time to start.
+    if (startup.Command.Equals("demo", StringComparison.OrdinalIgnoreCase))
+        await WaitForServerAsync();
+
+    return await RunAsync(startup);
+}
+
+// ---------- Interactive ----------
+
+Console.WriteLine($"CashMovements client. Server: {serverUri}");
+await WaitForServerAsync();
+Console.WriteLine("Type 'help' for commands, 'exit' to quit.");
+
+while (true)
+{
+    Console.WriteLine();
+    Console.Write(Prompt);
+    var input = Console.ReadLine();
+    if (input is null)
+        break; // end of input (Ctrl+Z / Ctrl+D, or stdin closed)
+
+    string[] tokens;
+    try
     {
-        "balance" => await commands.BalanceAsync(line),
-        "record" => await commands.RecordAsync(line),
-        "statement" => await commands.StatementAsync(line),
-        "demo" => await commands.DemoAsync(line),
-        _ => UsageError($"Unknown command '{line.Command}'."),
-    };
+        tokens = Tokenize(input);
+    }
+    catch (UsageException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        continue;
+    }
+
+    if (tokens.Length == 0)
+        continue;
+
+    switch (tokens[0].ToLowerInvariant())
+    {
+        case "exit" or "quit":
+            return 0;
+        case "help" or "?":
+            Console.WriteLine(CommandHelp);
+            continue;
+        case "cls" or "clear":
+            Console.Clear();
+            continue;
+    }
+
+    try
+    {
+        await RunAsync(CommandLine.Parse(tokens));
+    }
+    catch (UsageException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+    }
 }
-catch (UsageException ex)
+
+return 0;
+
+// ---------- Helpers ----------
+
+// Runs one command and reports errors; returns the exit code.
+async Task<int> RunAsync(CommandLine line)
 {
-    return UsageError(ex.Message);
+    using var cancellation = new CancellationTokenSource();
+    running = cancellation;
+    var commands = new Commands(client, cancellation.Token);
+
+    try
+    {
+        return line.Command!.ToLowerInvariant() switch
+        {
+            "balance" => await commands.BalanceAsync(line),
+            "record" => await commands.RecordAsync(line),
+            "statement" => await commands.StatementAsync(line),
+            "demo" => await commands.DemoAsync(line),
+            _ => UsageError($"Unknown command '{line.Command}'."),
+        };
+    }
+    catch (UsageException ex)
+    {
+        return UsageError(ex.Message);
+    }
+    catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled && cancellation.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("Cancelled.");
+        return 1;
+    }
+    catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
+    {
+        Console.Error.WriteLine($"Unavailable: could not reach {serverUri}. Is the server running? ({ex.Status.Detail})");
+        return 1;
+    }
+    catch (RpcException ex)
+    {
+        Console.Error.WriteLine($"{ex.StatusCode}: {ex.Status.Detail}");
+        return 1;
+    }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+    {
+        Console.Error.WriteLine("Cancelled.");
+        return 1;
+    }
+    finally
+    {
+        running = null;
+    }
 }
-catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable)
+
+// Waits briefly for the server, which may still be starting (e.g. launched together from Visual Studio).
+async Task WaitForServerAsync()
 {
-    Console.Error.WriteLine($"Unavailable: could not reach {serverUri}. Is the server running? ({ex.Status.Detail})");
-    return 1;
+    Console.Write("Connecting... ");
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    try
+    {
+        await channel.ConnectAsync(timeout.Token);
+        Console.WriteLine("connected.");
+    }
+    catch (Exception ex) when (ex is OperationCanceledException or RpcException or InvalidOperationException)
+    {
+        Console.WriteLine("not reachable after 30 seconds. Commands will fail until the server is running.");
+    }
 }
-catch (RpcException ex)
+
+// Splits a typed line into arguments like a shell: whitespace-separated, double quotes group words.
+static string[] Tokenize(string input)
 {
-    Console.Error.WriteLine($"{ex.StatusCode}: {ex.Status.Detail}");
-    return 1;
-}
-catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-{
-    Console.Error.WriteLine("Cancelled.");
-    return 1;
+    var tokens = new List<string>();
+    var current = new StringBuilder();
+    var inQuotes = false;
+    var hasToken = false;
+
+    foreach (var c in input)
+    {
+        if (c == '"')
+        {
+            inQuotes = !inQuotes;
+            hasToken = true;
+        }
+        else if (char.IsWhiteSpace(c) && !inQuotes)
+        {
+            if (hasToken)
+                tokens.Add(current.ToString());
+            current.Clear();
+            hasToken = false;
+        }
+        else
+        {
+            current.Append(c);
+            hasToken = true;
+        }
+    }
+
+    if (inQuotes)
+        throw new UsageException("Missing closing quote.");
+    if (hasToken)
+        tokens.Add(current.ToString());
+
+    return [.. tokens];
 }
 
 static int UsageError(string message)
 {
     Console.Error.WriteLine(message);
-    Console.Error.WriteLine("Run with --help for usage.");
+    Console.Error.WriteLine("Type 'help' (or run with --help) for usage.");
     return 2;
 }

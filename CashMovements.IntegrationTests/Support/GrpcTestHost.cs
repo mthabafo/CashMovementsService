@@ -26,6 +26,9 @@ internal sealed class GrpcTestHost : IDisposable
 
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            // Tests own their database; never touch the developer's local one.
+            builder.UseSetting("Database:AutoSetup", "false");
+
             if (sqlConnectionString is not null)
                 builder.UseSetting("ConnectionStrings:CashMovements", sqlConnectionString);
 

@@ -16,5 +16,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="CashMovements.Client/CashMovements.Client.csproj" />
+    <File Path="CashMovements.slnLaunch" />
+    <File Path="test.ps1" />
   </Folder>
 </Solution>
