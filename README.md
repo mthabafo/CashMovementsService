@@ -30,3 +30,17 @@ dotnet test CashMovements.slnx
 
 Repository and end-to-end tests need SQL Server: they use the local default instance, or the server in
 `CASHMOVEMENTS_TEST_SQLSERVER` (a connection string without a database). Each run creates and drops its own database.
+
+### Volume test
+
+`StatementVolumeTests` streams a 150,000-line statement (with 50,000 earlier movements behind the opening balance)
+end to end through gRPC and SQL Server. It checks every line arrives in order with the right running balance, and that
+the statement is streamed, not buffered: the first line arrives quickly and live memory stays flat. It takes about
+6 seconds, most of it seeding, and runs with the rest of the tests.
+
+```powershell
+dotnet test CashMovements.IntegrationTests --filter Category=Volume --logger "console;verbosity=detailed"   # run it alone, with timings
+dotnet test CashMovements.slnx --filter Category!=Volume                                                   # everything else
+```
+
+Measured on a developer machine: first line after ~20 ms, all 150,000 lines in ~1.8 s, live memory growth ~0.1 MB.
