@@ -120,6 +120,29 @@ public class MovementTests
             () => Movement.Rehydrate(0, "ACC1", "REF-1", 10m, "ZAR", Now, null));
     }
 
+    [Theory]
+    [InlineData("0")]       // zero
+    [InlineData("1.005")]   // too many decimal places
+    [InlineData("-0.001")]  // both: rounds to zero
+    public void Rehydrate_enforces_the_amount_invariants_like_Create(string amountText)
+    {
+        var amount = decimal.Parse(amountText, CultureInfo.InvariantCulture);
+
+        Assert.Throws<InvalidMovementException>(
+            () => Movement.Rehydrate(42, "ACC1", "REF-1", amount, "ZAR", Now.AddDays(-1), null));
+        Assert.Throws<InvalidMovementException>(
+            () => Movement.Create("ACC1", "REF-1", amount, "ZAR", Now.AddDays(-1), null, Clock));
+    }
+
+    [Fact]
+    public void Rehydrate_still_validates_value_objects_and_narration()
+    {
+        Assert.Throws<InvalidValueException>(
+            () => Movement.Rehydrate(42, "ACC1", "REF-1", 10m, "RAND", Now, null));
+        Assert.Throws<InvalidMovementException>(
+            () => Movement.Rehydrate(42, "ACC1", "REF-1", 10m, "ZAR", Now, new string('x', Movement.MaxNarrationLength + 1)));
+    }
+
     [Fact]
     public void Same_payload_is_detected_regardless_of_id_and_formatting()
     {

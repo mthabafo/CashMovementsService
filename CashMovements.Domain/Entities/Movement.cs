@@ -75,10 +75,7 @@ public sealed class Movement
         var now = clock.GetUtcNow();
         var occurredUtc = occurredAt.ToUniversalTime();
 
-        if (amount == 0)
-            throw new InvalidMovementException("Amount must not be zero.");
-        if (decimal.Round(amount, MaxDecimalPlaces) != amount)
-            throw new InvalidMovementException($"Amount must have at most {MaxDecimalPlaces} decimal places.");
+        ValidateAmount(amount);
         if (occurredUtc > now + MaxClockSkew)
             throw new InvalidMovementException("Occurred-at date must not be in the future.");
 
@@ -94,7 +91,9 @@ public sealed class Movement
 
     /// <summary>
     /// Rebuilds a movement that has already been persisted (used by the repository).
-    /// Value objects are still validated, but the future-date check is skipped: it only applies when recording.
+    /// Every invariant of a movement still holds (value objects, amount, narration), so an invalid movement can't exist
+    /// however it is created. Only the future-date check is skipped: it is a rule about recording, and an old row
+    /// compared against a later clock must never become unreadable.
     /// </summary>
     public static Movement Rehydrate(
         long id,
@@ -107,6 +106,8 @@ public sealed class Movement
     {
         if (id <= 0)
             throw new ArgumentOutOfRangeException(nameof(id), id, "A persisted movement must have a positive Id.");
+
+        ValidateAmount(amount);
 
         return new Movement(
             id,
@@ -133,6 +134,16 @@ public sealed class Movement
             && Currency == other.Currency
             && OccurredAt == other.OccurredAt
             && Narration == other.Narration;
+    }
+
+    /// <summary>The amount invariants, shared by <see cref="Create"/> and <see cref="Rehydrate"/>.</summary>
+    private static void ValidateAmount(decimal amount)
+    {
+        if (amount == 0)
+            throw new InvalidMovementException("Amount must not be zero.");
+
+        if (decimal.Round(amount, MaxDecimalPlaces) != amount)
+            throw new InvalidMovementException($"Amount must have at most {MaxDecimalPlaces} decimal places.");
     }
 
     private static string? NormaliseNarration(string? narration)

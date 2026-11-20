@@ -176,8 +176,20 @@ public sealed class MovementRepository : IMovementRepository
         public DateTimeOffset OccurredAt { get; init; }
         public string? Narration { get; init; }
 
+        /// <exception cref="CorruptMovementDataException">The row breaks a domain rule.</exception>
         public Movement ToMovement()
-            => Movement.Rehydrate(Id, AccountId, ExternalRef, Amount, Currency, OccurredAt, Narration);
+        {
+            try
+            {
+                return Movement.Rehydrate(Id, AccountId, ExternalRef, Amount, Currency, OccurredAt, Narration);
+            }
+            catch (Exception ex) when (ex is DomainException or ArgumentException)
+            {
+                // A bad row is a server-side data problem, not the caller's mistake: don't let it surface as a
+                // DomainException (which the API reports as InvalidArgument).
+                throw new CorruptMovementDataException(Id, ex);
+            }
+        }
     }
 
     /// <summary>The connection and read-only SNAPSHOT transaction behind one statement.</summary>
