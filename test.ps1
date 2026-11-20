@@ -101,7 +101,7 @@ try {
         Invoke-Build 'CashMovements.Wcf.Client'
     }
     else {
-        Invoke-Build 'CashMovements.Client'
+        Invoke-Build 'CashMovements.Grpc.Client'
     }
 
     if ($grpcRunning) {
@@ -130,7 +130,7 @@ try {
     }
     else {
         Write-Host ''
-        & dotnet (Join-Path $root 'CashMovements.Client\bin\Debug\net8.0\CashMovements.Client.dll') @ClientArgs --server "http://localhost:$grpcPort"
+        & dotnet (Join-Path $root 'CashMovements.Grpc.Client\bin\Debug\net8.0\CashMovements.Grpc.Client.dll') @ClientArgs --server "http://localhost:$grpcPort"
         $clientExit = $LASTEXITCODE
     }
 }

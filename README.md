@@ -2,16 +2,16 @@
 
 ## Manual testing
 
-- **Visual Studio:** pick the **Server + Client** launch profile and press F5.
+- **Visual Studio:** pick the **Server + GRPC Client** launch profile and press F5.
 - **Command line:** `.\test.ps1` from this folder.
 
-Either way the local database is set up automatically. See [CashMovements.Client/README.md](CashMovements.Client/README.md).
+Either way the local database is set up automatically. See [CashMovements.Grpc.Client/README.md](CashMovements.Grpc.Client/README.md).
 
 ## Legacy WCF gateway
 
 A .NET Framework 4.8 WCF (NetTcp) service that returns an account's current balance by calling the gRPC service.
 
-- **Visual Studio:** pick the **Server + WCF gateway + legacy client** launch profile and press F5.
+- **Visual Studio:** pick the **Server + WCF Client** launch profile and press F5.
 - **Command line:** `.\test.ps1 -Legacy` opens a `legacy>` prompt (type e.g. `ACC-1001 ZAR`); `.\test.ps1 -Legacy ACC-2002 ZAR` gets one balance and exits.
 
 Run instructions, ports and configuration are in [CashMovements.Wcf/README.md](CashMovements.Wcf/README.md).

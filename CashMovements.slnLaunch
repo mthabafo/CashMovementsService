@@ -8,7 +8,7 @@
         "DebugTarget": "http"
       },
       {
-        "Path": "CashMovements.Client\\CashMovements.Client.csproj",
+        "Path": "CashMovements.Grpc.Client\\CashMovements.Grpc.Client.csproj",
         "Action": "Start",
         "DebugTarget": "Interactive"
       }
@@ -23,7 +23,7 @@
         "DebugTarget": "http"
       },
       {
-        "Path": "CashMovements.Client\\CashMovements.Client.csproj",
+        "Path": "CashMovements.Grpc.Client\\CashMovements.Grpc.Client.csproj",
         "Action": "Start",
         "DebugTarget": "Demo"
       }

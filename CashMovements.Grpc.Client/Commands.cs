@@ -3,7 +3,7 @@ using Grpc.Core;
 using Proto = CashMovements.Grpc.Contracts;
 using ItemCase = CashMovements.Grpc.Contracts.GetStatementResponse.ItemOneofCase;
 
-namespace CashMovements.Client;
+namespace CashMovements.Grpc.Client;
 
 /// <summary>One method per command. Each returns the process exit code; gRPC errors propagate to Program.</summary>
 internal sealed class Commands(Proto.Movements.MovementsClient client, CancellationToken cancellationToken)

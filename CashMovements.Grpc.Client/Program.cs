@@ -1,5 +1,5 @@
 using System.Text;
-using CashMovements.Client;
+using CashMovements.Grpc.Client;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Proto = CashMovements.Grpc.Contracts;
@@ -32,10 +32,10 @@ const string CommandHelp = """
 
 const string Usage = $"""
     Usage:
-      CashMovements.Client [--server <url>]                          interactive prompt
-      CashMovements.Client <command> [arguments] [--server <url>]    run one command and exit
+      CashMovements.Grpc.Client [--server <url>]                          interactive prompt
+      CashMovements.Grpc.Client <command> [arguments] [--server <url>]    run one command and exit
 
-    --server defaults to {DefaultServer} (the server's "http" launch profile).
+    --server defaults to {DefaultServer} (the gRPC server's HTTP/2 endpoint, Kestrel:Endpoints:Grpc in its appsettings.json).
 
     {CommandHelp}
     """;

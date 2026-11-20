@@ -11,7 +11,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>CashMovements.Client</RootNamespace>
+    <RootNamespace>CashMovements.Grpc.Client</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

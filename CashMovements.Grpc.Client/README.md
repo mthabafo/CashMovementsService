@@ -1,4 +1,4 @@
-# CashMovements.Client
+# CashMovements.Grpc.Client
 
 A command-line client for manually testing the CashMovements gRPC service. It only knows the service through
 `cash_movements.proto` (no reference to the server project), like any external client.
@@ -9,8 +9,8 @@ Nothing needs setting up first. In Development the server creates the local data
 `Server=.`) if it's missing and runs `001_schema.sql`, `002_procedures.sql` and `003_seed.sql` on every start;
 all three are safe to re-run. This is controlled by `Database:AutoSetup` in `appsettings.Development.json`.
 
-**Visual Studio:** choose the **Server + Client** launch profile in the toolbar's startup dropdown and press F5.
-The server and the interactive client start together. **Server + Client demo** runs the demo instead.
+**Visual Studio:** choose the **Server + GRPC Client** launch profile in the toolbar's startup dropdown and press F5.
+The server and the interactive client start together. **Server + GRPC Client demo** runs the demo instead.
 (The profiles are in `CashMovements.slnLaunch`.)
 
 **Command line**, from the solution folder:
@@ -29,7 +29,7 @@ If PowerShell refuses to run scripts, use `powershell -ExecutionPolicy Bypass -F
 
 ## Commands
 
-At the `cashmovements>` prompt (or as arguments for a one-off run):
+At the `cashmovements.grpc>` prompt (or as arguments for a one-off run):
 
 | Command | Calls |
 |---|---|
@@ -40,9 +40,9 @@ At the `cashmovements>` prompt (or as arguments for a one-off run):
 | `help`, `clear`, `exit` | Prompt only |
 
 ```text
-cashmovements> balance ACC-1001 ZAR
-cashmovements> record ACC-1001 PAY-77 -149.50 ZAR --narration "Groceries"
-cashmovements> statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
+cashmovements.grpc> balance ACC-1001 ZAR
+cashmovements.grpc> record ACC-1001 PAY-77 -149.50 ZAR --narration "Groceries"
+cashmovements.grpc> statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
 ```
 
 - The seed data has accounts `ACC-1001` (ZAR and USD) and `ACC-2002` (ZAR, overdrawn).
@@ -57,5 +57,5 @@ cashmovements> statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
 
 ```powershell
 dotnet run --project CashMovements.Grpc --launch-profile http
-dotnet run --project CashMovements.Client
+dotnet run --project CashMovements.Grpc.Client
 ```

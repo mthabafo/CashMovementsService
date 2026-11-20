@@ -3,7 +3,7 @@
   <!--
     Legacy console client for manual testing of the WCF gateway (CashMovements.Wcf).
     It compiles the gateway's contract files directly (linked below) instead of referencing the host,
-    the same way CashMovements.Client uses the .proto file.
+    the same way CashMovements.Grpc.Client uses the .proto file.
   -->
 
   <PropertyGroup>

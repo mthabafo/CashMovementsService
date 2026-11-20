@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace CashMovements.Client;
+namespace CashMovements.Grpc.Client;
 
 /// <summary>Thrown for a mistake in the command line; the message is shown with the usage text.</summary>
 internal sealed class UsageException(string message) : Exception(message);

@@ -1,7 +1,7 @@
 using Google.Protobuf.WellKnownTypes;
 using Proto = CashMovements.Grpc.Contracts;
 
-namespace CashMovements.Client;
+namespace CashMovements.Grpc.Client;
 
 /// <summary>Formats responses for the console. Amounts are printed exactly as the server sent them.</summary>
 internal static class Output
