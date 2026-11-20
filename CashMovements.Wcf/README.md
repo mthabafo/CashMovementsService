@@ -43,20 +43,35 @@ The gateway needs the gRPC service running. Easiest, from the solution folder:
 .\test.ps1 -Legacy
 ```
 
-This builds and starts the gRPC service and the gateway, calls the gateway with the legacy client
-(`ACC-1001 ZAR` by default; pass e.g. `.\test.ps1 -Legacy ACC-2002 ZAR` for another), then stops both.
+This builds and starts the gRPC service and the gateway, then opens the legacy client's prompt:
 
-In Visual Studio, pick the **Server + WCF gateway + legacy client** launch profile and press F5.
+```text
+legacy> ACC-1001 ZAR
+  Account: ACC-1001
+  Balance: 39600.01 ZAR
+  As at:   2026-11-20 08:15:02Z
+
+legacy> exit
+```
+
+Typing `exit` stops everything the script started. To get one balance without the prompt, pass it:
+`.\test.ps1 -Legacy ACC-2002 ZAR`.
+
+In Visual Studio, pick the **Server + WCF gateway + legacy client** launch profile and press F5. Three consoles open
+(gRPC server, gateway, legacy client); type into the legacy client's `legacy>` prompt. It waits for the other two to
+finish starting before the first call. If a window opens and closes straight away after the launch profiles changed,
+Visual Studio is still using the old ones: close and reopen the solution.
 
 Or start each piece yourself, in separate terminals:
 
 ```powershell
 dotnet run --project CashMovements.Grpc --launch-profile http
 .\CashMovements.Wcf\bin\Debug\net48\CashMovements.Wcf.exe
-.\CashMovements.Wcf.Client\bin\Debug\net48\CashMovements.Wcf.Client.exe ACC-1001 ZAR
+.\CashMovements.Wcf.Client\bin\Debug\net48\CashMovements.Wcf.Client.exe
 ```
 
-(Build first with `dotnet build CashMovements.slnx`.) The gateway runs until Ctrl+C.
+(Build first with `dotnet build CashMovements.slnx`.) The gateway runs until Ctrl+C. The client takes
+`<account> <currency>` at its prompt, or as arguments for a single call (`... CashMovements.Wcf.Client.exe ACC-1001 ZAR`).
 
 ## Configuration
 

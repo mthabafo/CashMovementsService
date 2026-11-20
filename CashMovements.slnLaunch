@@ -1,6 +1,6 @@
 [
   {
-    "Name": "Server + Client",
+    "Name": "Server + GRPC Client",
     "Projects": [
       {
         "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
@@ -15,7 +15,7 @@
     ]
   },
   {
-    "Name": "Server + Client demo",
+    "Name": "Server + GRPC Client demo",
     "Projects": [
       {
         "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
@@ -30,7 +30,7 @@
     ]
   },
   {
-    "Name": "Server + WCF gateway + legacy client",
+    "Name": "Server + WCF Client",
     "Projects": [
       {
         "Path": "CashMovements.Grpc\\CashMovements.Grpc.csproj",
@@ -44,7 +44,7 @@
       {
         "Path": "CashMovements.Wcf.Client\\CashMovements.Wcf.Client.csproj",
         "Action": "Start",
-        "DebugTarget": "Balance ACC-1001 ZAR"
+        "DebugTarget": "Interactive"
       }
     ]
   }

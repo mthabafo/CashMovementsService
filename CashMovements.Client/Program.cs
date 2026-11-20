@@ -9,7 +9,7 @@ using Proto = CashMovements.Grpc.Contracts;
 // Exit codes (one-shot): 0 success, 1 the server returned an error (or demo found something unexpected), 2 bad command line.
 
 const string DefaultServer = "http://localhost:5145";
-const string Prompt = "cashmovements> ";
+const string Prompt = "cashmovements.grpc> ";
 
 const string CommandHelp = """
     Commands:

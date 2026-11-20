@@ -8,8 +8,7 @@ using CashMovements.Wcf;
 var backendUrl = ConfigurationManager.AppSettings["GrpcBackendUrl"];
 if (string.IsNullOrWhiteSpace(backendUrl) || !Uri.TryCreate(backendUrl, UriKind.Absolute, out var backendUri))
 {
-    Console.Error.WriteLine("appSettings 'GrpcBackendUrl' must be the gRPC-Web address of the CashMovements service, e.g. http://localhost:5146.");
-    return 1;
+    return Fail("appSettings 'GrpcBackendUrl' must be the gRPC-Web address of the CashMovements service, e.g. http://localhost:5146.");
 }
 
 var timeoutSeconds = int.TryParse(ConfigurationManager.AppSettings["BackendTimeoutSeconds"], out var seconds) && seconds > 0 ? seconds : 10;
@@ -25,8 +24,7 @@ try
 }
 catch (Exception ex) when (ex is AddressAlreadyInUseException or CommunicationException or InvalidOperationException)
 {
-    Console.Error.WriteLine($"Could not start the WCF host: {ex.Message}");
-    return 1;
+    return Fail($"Could not start the WCF host: {ex.Message}");
 }
 
 Log("CashMovements legacy WCF gateway started.");
@@ -54,3 +52,17 @@ catch (Exception)
 }
 
 return 0;
+
+// Prints a startup error; under the Visual Studio debugger, keeps the window open until Enter so it can be read.
+static int Fail(string message)
+{
+    Console.Error.WriteLine(message);
+
+    if (System.Diagnostics.Debugger.IsAttached && !Console.IsInputRedirected)
+    {
+        Console.WriteLine("Press Enter to close this window.");
+        Console.ReadLine();
+    }
+
+    return 1;
+}

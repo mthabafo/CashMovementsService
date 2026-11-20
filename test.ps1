@@ -8,7 +8,8 @@
     client opens its interactive prompt (type 'exit' to finish); with arguments they run as one command.
 
     -Legacy: also starts the WCF gateway (CashMovements.Wcf, .NET Framework) and runs the legacy WCF client instead.
-    Arguments are <account> <currency>; the default is ACC-1001 ZAR.
+    With no arguments it opens the legacy prompt (type e.g. ACC-1001 ZAR, then 'exit'); with <account> <currency>
+    it shows that balance and exits.
 
     Anything already listening on its port (gRPC 5145, WCF 8095) is used as-is and left running.
     Server and gateway output go to log files (paths printed at start) so they don't mix with the client's.
@@ -123,7 +124,6 @@ try {
             $started.Add((Start-Background 'WCF gateway' (Join-Path $wcfDir 'CashMovements.Wcf.exe') @() $wcfDir $wcfPort))
         }
 
-        if ($ClientArgs.Count -eq 0) { $ClientArgs = @('ACC-1001', 'ZAR') }
         Write-Host ''
         & (Join-Path $root 'CashMovements.Wcf.Client\bin\Debug\net48\CashMovements.Wcf.Client.exe') @ClientArgs
         $clientExit = $LASTEXITCODE
