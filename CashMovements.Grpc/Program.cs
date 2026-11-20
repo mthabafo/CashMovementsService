@@ -1,24 +1,19 @@
 using CashMovements.Application;
-using CashMovements.Application.Interfaces;
-using CashMovements.Domain.Interfaces;
 using CashMovements.Grpc.Interceptors;
 using CashMovements.Grpc.Services;
+using CashMovements.Infrastructure;
 using CashMovements.Infrastructure.Persistence;
-using CashMovements.Infrastructure.Repositories;
+
+// Composition root. This is the only API code allowed to use CashMovements.Infrastructure (enforced by
+// ArchitectureTests): API → Application → Domain ← Infrastructure.
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpc(options => options.Interceptors.Add<DomainExceptionInterceptor>());
 
-// Fail at startup, not on the first request, if the database isn't configured.
-var connectionString = builder.Configuration.GetConnectionString("CashMovements");
-if (string.IsNullOrWhiteSpace(connectionString))
-    throw new InvalidOperationException("Connection string 'ConnectionStrings:CashMovements' is not configured.");
-
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<ISqlConnectionFactory>(new SqlConnectionFactory(connectionString));
-builder.Services.AddScoped<IMovementRepository, MovementRepository>();
-builder.Services.AddScoped<IMovementService, MovementService>();
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration); // fails at startup if the connection string is missing
 
 var app = builder.Build();
 
@@ -26,6 +21,7 @@ var app = builder.Build();
 // repo's idempotent scripts (schema, procedures, seed), so there are no manual setup steps. Off unless configured.
 if (app.Configuration.GetValue<bool>("Database:AutoSetup"))
 {
+    var connectionString = app.Configuration.GetConnectionString(InfrastructureServiceCollectionExtensions.ConnectionStringName)!;
     var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSetup");
     var scripts = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Database"), "*.sql").Order().ToList();
 
