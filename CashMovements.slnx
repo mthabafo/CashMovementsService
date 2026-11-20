@@ -1,4 +1,6 @@
 <Solution>
+  <File Path="README.md" />
+  <File Path="SOLUTION.md" />
   <Folder Name="/database/">
     <File Path="001_schema.sql" />
     <File Path="002_procedures.sql" />

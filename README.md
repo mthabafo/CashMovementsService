@@ -1,5 +1,7 @@
 # CashMovements
 
+Design notes and trade-offs (such as how large statements are streamed) are in [SOLUTION.md](SOLUTION.md).
+
 ## Manual testing
 
 - **Visual Studio:** pick the **Server + GRPC Client** launch profile and press F5.
