@@ -29,3 +29,15 @@ A unique constraint in SQL Server (binary collation) guarantees there's never a 
 does, so nothing can be double-counted.
 If identical requests arrive at the same moment, the ones that lose the insert race catch the unique-key error, look
 the pair up again and are treated as retries, so every caller gets the original movement back.
+
+## Database failures: retries and `Unavailable`
+
+Transient database failures (a failed or dropped connection, a failover, a deadlock) are retried in Infrastructure with
+Polly: up to 3 retries with exponential backoff and jitter, no new retry after 5 seconds, and none once the caller
+cancels or its deadline passes.
+Each read and the insert are retried as a whole (open the connection, run the command); the insert is safe to repeat
+because a retry hits the unique key and the service returns the original movement, and a statement retries only its
+opening, since lines already streamed can't be taken back.
+Command timeouts aren't retried by default, because repeating a slow query adds load and multiplies the wait.
+When retries run out, the caller gets `Unavailable` with a generic message (`BackendUnavailable` over WCF), so clients
+know to try again later, instead of `Internal`, which means a bug.
