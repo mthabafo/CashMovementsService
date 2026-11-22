@@ -49,6 +49,10 @@ dotnet test CashMovements.slnx
 Repository and end-to-end tests need SQL Server: they use the local default instance, or the server in
 `CASHMOVEMENTS_TEST_SQLSERVER` (a connection string without a database). Each run creates and drops its own database.
 
+`ParityTests` (in `CashMovements.Wcf.Tests`, `Category=EndToEnd`) checks the legacy and new entry points agree over the
+same data, with nothing faked: it starts the built gRPC server in its own process on a throwaway database, records
+movements through gRPC, and compares balances and validation errors from the WCF gateway (over net.tcp) with gRPC's.
+
 ### Volume test
 
 `StatementVolumeTests` streams a 150,000-line statement (with 50,000 earlier movements behind the opening balance)

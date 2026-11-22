@@ -5,6 +5,8 @@
     - LegacyBalanceServiceTests: result mapping and every backend error → fault, with a fake backend.
     - NetTcpTests: a real ServiceHost and ChannelFactory over NetTcp (Windows transport security), still with the
       fake backend, proving the contract, binding and typed faults work on the wire.
+    - EndToEnd/ParityTests: nothing faked. Starts the real gRPC server (its own process) on a throwaway SQL Server
+      database and checks the legacy WCF path and the gRPC API give the same outcomes over the same data.
     The gRPC backend itself is covered by CashMovements.IntegrationTests (including gRPC-Web).
   -->
 
@@ -34,6 +36,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CashMovements.Wcf\CashMovements.Wcf.csproj" />
+    <!-- Build order only: ParityTests runs the gRPC server's build output (.NET 8) in its own process. -->
+    <ProjectReference Include="..\CashMovements.Grpc\CashMovements.Grpc.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
   </ItemGroup>
 
 </Project>

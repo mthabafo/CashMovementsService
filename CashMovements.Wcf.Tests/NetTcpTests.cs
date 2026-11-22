@@ -1,7 +1,6 @@
-using System.Net;
-using System.Net.Sockets;
 using System.ServiceModel;
 using CashMovements.Wcf.Contracts;
+using CashMovements.Wcf.Tests.Support;
 using Grpc.Core;
 
 namespace CashMovements.Wcf.Tests;
@@ -12,16 +11,9 @@ namespace CashMovements.Wcf.Tests;
 /// </summary>
 public sealed class NetTcpTests : IDisposable
 {
-    private readonly List<ICommunicationObject> _opened = [];
+    private readonly GatewayHost _gateway = new();
 
-    public void Dispose()
-    {
-        foreach (var item in Enumerable.Reverse(_opened))
-        {
-            try { item.Close(TimeSpan.FromSeconds(2)); }
-            catch (Exception) { item.Abort(); }
-        }
-    }
+    public void Dispose() => _gateway.Dispose();
 
     [Fact]
     public async Task GetBalance_returns_the_result_over_net_tcp()
@@ -59,39 +51,5 @@ public sealed class NetTcpTests : IDisposable
         Assert.DoesNotContain("secret", fault.Message);
     }
 
-    /// <summary>Hosts the service on a free local port with the gateway's binding and returns a connected client.</summary>
-    private ILegacyBalanceService Start(IBalanceBackend backend)
-    {
-        var address = new Uri($"net.tcp://localhost:{FreePort()}/CashMovements/Balance");
-
-        var host = new ServiceHost(new LegacyBalanceService(backend, _ => { }), address);
-        host.AddServiceEndpoint(typeof(ILegacyBalanceService), GatewayBinding(), "");
-        host.Open();
-        _opened.Add(host);
-
-        var factory = new ChannelFactory<ILegacyBalanceService>(GatewayBinding(), new EndpointAddress(address));
-        _opened.Add(factory);
-
-        var channel = factory.CreateChannel();
-        _opened.Add((ICommunicationObject)channel);
-        return channel;
-    }
-
-    /// <summary>The same binding as App.config's "WindowsTransport".</summary>
-    private static NetTcpBinding GatewayBinding()
-    {
-        var binding = new NetTcpBinding(SecurityMode.Transport);
-        binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
-        binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
-        return binding;
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
+    private ILegacyBalanceService Start(IBalanceBackend backend) => _gateway.Start(backend);
 }
