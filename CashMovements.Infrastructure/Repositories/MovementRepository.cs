@@ -33,12 +33,19 @@ public sealed class MovementRepository : IMovementRepository
     {
         await using var connection = await _connections.OpenAsync(cancellationToken);
 
-        var row = await connection.QuerySingleOrDefaultAsync<MovementRow>(Command(
-            Procedures.FindByExternalRef,
-            new { AccountId = accountId.Value, ExternalRef = externalRef.Value },
-            cancellationToken: cancellationToken));
+        try
+        {
+            var row = await connection.QuerySingleOrDefaultAsync<MovementRow>(Command(
+                Procedures.FindByExternalRef,
+                new { AccountId = accountId.Value, ExternalRef = externalRef.Value },
+                cancellationToken: cancellationToken));
 
-        return row?.ToMovement();
+            return row?.ToMovement();
+        }
+        catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+        {
+            throw new StorageUnavailableException(sql);
+        }
     }
 
     public async Task<Movement> AddAsync(Movement movement, CancellationToken cancellationToken)
@@ -69,6 +76,12 @@ public sealed class MovementRepository : IMovementRepository
             // Another request recorded this (AccountId, ExternalRef) between the service's lookup and this insert.
             throw new DuplicateMovementException(movement.ExternalRef);
         }
+        catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+        {
+            // A timeout here leaves the outcome unknown, but retrying is still safe: the external ref makes the insert
+            // idempotent, so a retry either inserts once or returns the movement that did get recorded.
+            throw new StorageUnavailableException(sql);
+        }
     }
 
     public async Task<decimal> SumAmountsAsync(
@@ -78,7 +91,14 @@ public sealed class MovementRepository : IMovementRepository
     {
         await using var connection = await _connections.OpenAsync(cancellationToken);
 
-        return await SumAsync(connection, transaction: null, accountId, currency, before: null, cancellationToken);
+        try
+        {
+            return await SumAsync(connection, transaction: null, accountId, currency, before: null, cancellationToken);
+        }
+        catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+        {
+            throw new StorageUnavailableException(sql);
+        }
     }
 
     public async Task<StatementSource> OpenStatementAsync(
@@ -103,11 +123,14 @@ public sealed class MovementRepository : IMovementRepository
 
             return new StatementSource(opening, movements, new Snapshot(connection, transaction));
         }
-        catch
+        catch (Exception ex)
         {
             if (transaction is not null)
                 await transaction.DisposeAsync();
             await connection.DisposeAsync();
+
+            if (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+                throw new StorageUnavailableException(sql);
             throw;
         }
     }
@@ -141,9 +164,22 @@ public sealed class MovementRepository : IMovementRepository
             transaction,
             commandType: CommandType.StoredProcedure);
 
-        await foreach (var row in rows.WithCancellation(cancellationToken))
+        // Enumerated by hand because C# doesn't allow "yield return" inside a try block that has a catch: only reading
+        // the next row is guarded, so a connection lost part-way through a statement is reported as unavailable too.
+        await using var enumerator = rows.GetAsyncEnumerator(cancellationToken);
+        while (true)
         {
-            yield return row.ToMovement();
+            try
+            {
+                if (!await enumerator.MoveNextAsync())
+                    yield break;
+            }
+            catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+            {
+                throw new StorageUnavailableException(sql);
+            }
+
+            yield return enumerator.Current.ToMovement();
 
             // Stop promptly (with OperationCanceledException) when the caller cancels between rows.
             cancellationToken.ThrowIfCancellationRequested();

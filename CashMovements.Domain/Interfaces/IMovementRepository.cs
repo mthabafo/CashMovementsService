@@ -11,6 +11,10 @@ namespace CashMovements.Domain.Interfaces;
 /// Naming: <c>Find…</c> may return null, <c>Add…</c> inserts, <c>Sum…</c> aggregates,
 /// <c>Open…</c> returns something that holds resources and must be disposed.
 /// </para>
+/// <para>
+/// Any member (including enumerating a statement's movements) throws
+/// <see cref="Exceptions.StorageUnavailableException"/> when the store can't be reached or times out.
+/// </para>
 /// </summary>
 public interface IMovementRepository
 {

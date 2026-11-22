@@ -9,6 +9,7 @@ namespace CashMovements.Grpc.Interceptors;
 /// <list type="bullet">
 /// <item><see cref="DuplicateMovementException"/> → ALREADY_EXISTS</item>
 /// <item>any other <see cref="DomainException"/> (invalid value or movement) → INVALID_ARGUMENT</item>
+/// <item><see cref="StorageUnavailableException"/> (database unreachable or timed out) → UNAVAILABLE, logged</item>
 /// <item><see cref="RpcException"/> and cancellations → passed through unchanged</item>
 /// <item>anything else → INTERNAL, logged, with no details leaked to the client</item>
 /// </list>
@@ -63,6 +64,11 @@ public sealed class DomainExceptionInterceptor : Interceptor
 
             case DomainException:
                 return new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+
+            case StorageUnavailableException:
+                // Temporary: Unavailable tells clients (and retry policies) it's worth trying again later.
+                _logger.LogWarning(ex, "Movement store unavailable in gRPC call {Method}", context.Method);
+                return new RpcException(new Status(StatusCode.Unavailable, "The service is temporarily unavailable. Try again later."));
 
             default:
                 _logger.LogError(ex, "Unhandled exception in gRPC call {Method}", context.Method);

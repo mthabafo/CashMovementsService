@@ -1,3 +1,4 @@
+using CashMovements.Domain.Exceptions;
 using Microsoft.Data.SqlClient;
 
 namespace CashMovements.Infrastructure.Persistence;
@@ -6,6 +7,7 @@ namespace CashMovements.Infrastructure.Persistence;
 public interface ISqlConnectionFactory
 {
     /// <summary>Returns an open connection. The caller owns it and must dispose it.</summary>
+    /// <exception cref="StorageUnavailableException">The database can't be reached.</exception>
     Task<SqlConnection> OpenAsync(CancellationToken cancellationToken);
 }
 
@@ -28,6 +30,13 @@ public sealed class SqlConnectionFactory : ISqlConnectionFactory
         {
             await connection.OpenAsync(cancellationToken);
             return connection;
+        }
+        catch (SqlException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Any failure to connect (server down or unreachable, database offline, login rejected) means the store
+            // can't be used right now. The details stay in the inner exception, for the server log.
+            await connection.DisposeAsync();
+            throw new StorageUnavailableException(ex);
         }
         catch
         {
