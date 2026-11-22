@@ -41,7 +41,18 @@ BEGIN
 
     -- Rows are stored in ledger order: every balance and statement query is one contiguous range read,
     -- already in statement order (OccurredAt, then Id as the tie-break), so nothing has to be sorted.
-    CREATE CLUSTERED INDEX CX_Movement_Ledger
+    -- UNIQUE because Id is part of the key: declaring it tells SQL Server each key identifies exactly one row.
+    CREATE UNIQUE CLUSTERED INDEX CX_Movement_Ledger
         ON dbo.Movement (AccountId, Currency, OccurredAt, Id);
 END;
+GO
+
+-- Upgrade: databases created before the ledger index was declared UNIQUE. Rebuilds the index in place (the data
+-- already satisfies it, since Id is unique); skipped once it's unique.
+IF EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.Movement') AND name = N'CX_Movement_Ledger' AND is_unique = 0)
+    CREATE UNIQUE CLUSTERED INDEX CX_Movement_Ledger
+        ON dbo.Movement (AccountId, Currency, OccurredAt, Id)
+        WITH (DROP_EXISTING = ON);
 GO
