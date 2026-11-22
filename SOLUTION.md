@@ -105,3 +105,61 @@ The trade-offs: inserts land inside each account's range rather than at the end,
 smaller indexes are larger because each carries the wide clustered key; and a balance still reads every row for its
 account, so it slows as history grows (a stored running balance would fix that, at the cost of extra writes and a
 frequently updated row per account).
+
+## Consistent outcomes across the new and legacy entry points
+
+The legacy WCF gateway has no business logic or database access of its own: it forwards to the same gRPC `GetBalance`,
+so both entry points share one implementation of validation, the balance query and retries, and can't drift apart.
+Outcomes map one to one: the same balance value (a string over gRPC, a decimal over WCF), `InvalidArgument` with the same
+message, `Unavailable` as a `BackendUnavailable` fault, and anything unexpected as a generic `Internal`; the server's
+5-second retry window fits inside the gateway's 10-second deadline.
+An end-to-end parity test proves it with nothing faked: it starts the real gRPC server on a throwaway database, records
+movements, and checks the WCF gateway over net.tcp and gRPC return the same balances and the same validation errors.
+The limits: the legacy side offers only balances, and the test calls gRPC over gRPC-Web, because .NET Framework can't
+use HTTP/2 without TLS (other tests show gRPC-Web and HTTP/2 give the same results).
+
+## Simplifications
+
+Deliberate simplifications, each with what a production system would do instead.
+
+**Domain**
+- **Accounts aren't modelled.** Any non-blank account ID of up to 34 characters is accepted, and an account with no
+  movements simply has a zero balance rather than `NotFound`. A real system would check against an account registry,
+  including whether the account may hold that currency.
+- **Currencies are checked for shape only.** Any three letters pass (`XYZ` included), and every currency allows two
+  decimal places, although ISO 4217 has currencies with none (JPY) or three (BHD). A real system would validate against
+  the ISO list and each currency's minor units.
+- **Movements are immutable.** There's no update, delete or reversal operation; a correction is recorded as a new,
+  opposite movement.
+- **References are unique forever.** An idempotency key never expires, and only amount and currency are compared when
+  one is re-used (see Field conflicts).
+- **Future dates allow 5 minutes of clock drift**, and statement periods have no maximum length.
+
+**API and security**
+- **The gRPC API has no TLS or authentication**: it listens on plain HTTP on localhost, and any caller can record
+  movements on any account. Production would need TLS, authenticated callers and per-account authorisation. (The WCF
+  gateway does use Windows authentication over net.tcp.)
+- **The legacy gateway offers only `GetBalance`** and runs as a console app; production would host it as a Windows
+  Service.
+- **Conflict errors don't name the conflicting fields**; the message says only that the details differ.
+
+**Data**
+- **Balances are calculated on every read**, so a balance gets slower as an account's history grows (see Indexes).
+- **Schema changes are idempotent SQL scripts** run by the server at startup in development, not a migration tool, and
+  there's no versioning of which scripts have run. Production would apply them as a deployment step (for example with
+  DbUp or a DACPAC); turning on `READ_COMMITTED_SNAPSHOT` and rebuilding the ledger index both need that.
+- **One SQL Server database**, with no read replicas, partitioning or archiving of old movements.
+
+**Operations**
+- **Secrets:** development connects with Windows authentication, so no password is stored. Production would supply
+  the connection string through environment variables or a vault, using a least-privilege login that can only run the
+  stored procedures; none of that is set up here.
+- **Logging is plain console output**, with no structured logs, metrics or tracing, and the WCF gateway logs account
+  IDs unmasked.
+- **No circuit breaker or rate limiting**: transient database failures are retried, but a long outage is retried by
+  every request.
+
+**Testing**
+- **Tests use a local SQL Server**, or the one in `CASHMOVEMENTS_TEST_SQLSERVER`, rather than containers, so a machine
+  without SQL Server can run only the unit tests.
+- **Load is tested at this scale only**: concurrency and volume tests run on one machine, not under production traffic.
