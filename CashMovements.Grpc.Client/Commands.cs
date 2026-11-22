@@ -84,7 +84,7 @@ internal sealed class Commands(Proto.Movements.MovementsClient client, Cancellat
             var result = await ExportDownloader.DownloadAsync(
                 ReadExport(call.ResponseStream, cancellationToken),
                 outputPath,
-                Environment.CurrentDirectory,
+                ExportDownloader.DefaultFolder(AppContext.BaseDirectory, Environment.CurrentDirectory),
                 progress.Report,
                 cancellationToken);
 

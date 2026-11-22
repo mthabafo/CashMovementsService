@@ -22,7 +22,7 @@ const string CommandHelp = """
     Amounts are sent exactly as typed: signed, '.' as decimal separator (e.g. 100, -249.50).
     Times without an offset are local time; a bare date means midnight (e.g. 2026-11-01, 2026-11-01T14:30, 2026-11-01T12:30Z).
     record --at defaults to now; statement and export default to the 30 days before --to (default now).
-    export saves a CSV (with a progress bar) to --out, a file or folder; by default the server's file name here.
+    export saves a CSV (with a progress bar) to the exports folder at the repository root, or to --out (a file or folder).
     Quote values with spaces: --narration "Card payment".
 
     Examples:

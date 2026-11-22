@@ -27,15 +27,15 @@ internal static class Output
         Console.WriteLine($"  Statement {h.AccountId} {h.Currency}, {Time(h.From)} to {Time(h.To)} (end exclusive)");
         Console.WriteLine($"  Opening balance: {h.OpeningBalance}");
         Console.WriteLine();
-        Console.WriteLine($"  {"Id",6}  {"Occurred (UTC)",-20}  {"ExternalRef",-16}  {"Amount",14}  {"Running",14}  Narration");
-        Console.WriteLine($"  {new string('-', 6)}  {new string('-', 20)}  {new string('-', 16)}  {new string('-', 14)}  {new string('-', 14)}  ---------");
+        Console.WriteLine($"  {"Occurred (UTC)",-20}  {"ExternalRef",-16}  {"Amount",14}  {"Running",14}  Narration");
+        Console.WriteLine($"  {new string('-', 20)}  {new string('-', 16)}  {new string('-', 14)}  {new string('-', 14)}  ---------");
     }
 
     public static void StatementLine(Proto.StatementLine line)
     {
         var m = line.Movement;
         Console.WriteLine(
-            $"  {m.Id,6}  {Time(m.OccurredAt),-20}  {Truncate(m.ExternalRef, 16),-16}  {m.Amount,14}  {line.RunningBalance,14}  {(m.HasNarration ? m.Narration : "")}");
+            $"  {Time(m.OccurredAt),-20}  {Truncate(m.ExternalRef, 16),-16}  {m.Amount,14}  {line.RunningBalance,14}  {(m.HasNarration ? m.Narration : "")}");
     }
 
     public static void StatementFooter(Proto.StatementFooter f)

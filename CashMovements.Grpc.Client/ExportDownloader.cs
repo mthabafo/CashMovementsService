@@ -54,6 +54,28 @@ public static class ExportDownloader
 {
     public const string PartialSuffix = ".partial";
 
+    /// <summary>The folder exports are saved to by default, at the repository root.</summary>
+    public const string ExportsFolderName = "exports";
+
+    private const string SolutionFile = "CashMovements.slnx";
+
+    /// <summary>
+    /// The default exports folder: <c>exports</c> at the repository root (the folder holding CashMovements.slnx), found
+    /// by walking up from <paramref name="start"/>, so it's the same however the client is launched (Visual Studio,
+    /// test.ps1, dotnet run). Without a repository above <paramref name="start"/>, <c>exports</c> under
+    /// <paramref name="fallback"/>. The folder is created by <see cref="DownloadAsync"/> when needed.
+    /// </summary>
+    public static string DefaultFolder(string start, string fallback)
+    {
+        for (var folder = new DirectoryInfo(start); folder is not null; folder = folder.Parent)
+        {
+            if (File.Exists(Path.Combine(folder.FullName, SolutionFile)))
+                return Path.Combine(folder.FullName, ExportsFolderName);
+        }
+
+        return Path.GetFullPath(Path.Combine(fallback, ExportsFolderName));
+    }
+
     /// <param name="messages">The export: one start, chunks, one end.</param>
     /// <param name="outputPath">File or folder to save to; null means the server's file name in <paramref name="defaultFolder"/>.</param>
     /// <param name="defaultFolder">Where to save when <paramref name="outputPath"/> is null.</param>
@@ -74,6 +96,7 @@ public static class ExportDownloader
 
         var path = TargetPath(outputPath, defaultFolder, start.FileName);
         var partial = path + PartialSuffix;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var kept = false;
 
         try

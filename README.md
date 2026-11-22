@@ -40,17 +40,39 @@ For retries to help, set these in each environment's connection string:
 | `Pool Blocking Period` | `NeverBlock` | Otherwise, after a failed connection, SqlClient fails new attempts straight away for 5 s or more, so retries can't succeed |
 | `ConnectRetryCount` / `ConnectRetryInterval` | `3` / `2` | SqlClient quietly re-establishes broken idle pooled connections, for example after a failover |
 
-## Statement export
+## Large statements (50,000+ lines) and export
 
-`ExportStatement` streams a statement as a CSV file: a start message with the file name and line count, the file in
-64 KB chunks, and an end message with the closing balance, byte count and SHA-256. The client's `export` command saves
-it with a progress bar and keeps the file only if it checks out:
+In development, `ACC-VOLUME` has 150,000 ZAR movements, one every 2 minutes from 1 January to late July 2026 (about
+720 a day). It's seeded by `004_seed_volume.sql`, which only the development auto-setup runs, on the server's first
+start.
 
-```powershell
-dotnet run --project CashMovements.Grpc.Client -- export ACC-VOLUME ZAR --from 2026-01-01 --to 2026-12-01
+With the server running (`.	est.ps1`, or the **Server + GRPC Client** launch profile), at the `cashmovements.grpc>`
+prompt:
+
+```text
+statement ACC-VOLUME ZAR --from 2026-01-01 --to 2026-03-12      # about 50,400 lines, printed to the console
+export    ACC-VOLUME ZAR --from 2026-01-01 --to 2026-03-12      # the same lines saved as CSV, with a progress bar
+export    ACC-VOLUME ZAR --from 2026-01-01 --to 2026-12-01      # all 150,000 lines
 ```
 
-`ACC-VOLUME` (150,000 movements) is seeded by `004_seed_volume.sql`, which only the development auto-setup runs.
+Or as a one-off command, while the server is running:
+
+```powershell
+dotnet run --project CashMovements.Grpc.Client -- statement ACC-VOLUME ZAR --from 2026-01-01 --to 2026-03-12
+```
+
+```powershell
+dotnet run --project CashMovements.Grpc.Client -- export ACC-VOLUME ZAR --from 2026-01-01 --to 2026-03-12
+```
+
+- Each day adds about 720 lines, so adjust `--to` for a different size. Times without an offset are local time.
+- Printing 50,000 lines to the console takes a while; `export` is the quicker way to get them all.
+- Exports are saved in the `exports` folder at the repository root (created if needed, ignored by git), or wherever
+  `--out` points.
+
+`ExportStatement` streams the statement as a CSV file: a start message with the file name and line count, the file in
+64 KB chunks, and an end message with the closing balance, byte count and SHA-256. The client keeps the file only if it
+checks out.
 
 ## Logging
 

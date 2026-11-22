@@ -49,7 +49,8 @@ cashmovements.grpc> export ACC-VOLUME ZAR --from 2026-01-01 --to 2026-12-01
 
 - The seed data has accounts `ACC-1001` (ZAR and USD) and `ACC-2002` (ZAR, overdrawn). In development, `ACC-VOLUME`
   has 150,000 ZAR movements (January to July 2026) for trying a large export.
-- `export` saves to `--out` (a file or a folder); by default the server's file name in the current folder. It writes
+- `export` saves to the `exports` folder at the repository root (created if needed, ignored by git), or to `--out`
+  (a file or a folder), under the server's file name, e.g. `statement_ACC-VOLUME_ZAR_20251231_20261130.csv`. It writes
   to `<file>.partial` and renames it only after the SHA-256, byte count and line count match the server's; otherwise,
   or on Ctrl+C, the partial file is deleted and the command fails.
 - Amounts are sent exactly as typed, so invalid input (`1,5`, `1.005`, `0`) can be tried to see the server reject it.

@@ -144,6 +144,40 @@ public sealed class ExportDownloaderTests : IDisposable
     }
 
     [Fact]
+    public void Exports_go_to_the_exports_folder_at_the_repository_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(_folder, "repo")).FullName;
+        File.WriteAllText(Path.Combine(root, "CashMovements.slnx"), "<Solution />");
+        var deep = Directory.CreateDirectory(Path.Combine(root, "CashMovements.Grpc.Client", "bin", "Debug", "net8.0")).FullName;
+
+        Assert.Equal(Path.Combine(root, "exports"), ExportDownloader.DefaultFolder(deep, fallback: "unused"));
+    }
+
+    [Fact]
+    public void Outside_a_repository_exports_go_under_the_fallback_folder()
+    {
+        var outside = Directory.CreateDirectory(Path.Combine(_folder, "elsewhere")).FullName;
+
+        Assert.Equal(Path.Combine(outside, "exports"), ExportDownloader.DefaultFolder(outside, fallback: outside));
+    }
+
+    [Fact]
+    public async Task A_missing_exports_folder_is_created()
+    {
+        var exports = Path.Combine(_folder, "exports");
+        var data = "x"u8.ToArray();
+        var messages = Script(
+            new ExportMessage.Start("statement.csv", 0),
+            new ExportMessage.Chunk(data, 0),
+            new ExportMessage.End("0.00", 0, data.Length, Sha256(data)));
+
+        var result = await ExportDownloader.DownloadAsync(messages, null, exports, null, default);
+
+        Assert.Equal(Path.Combine(exports, "statement.csv"), result.Path);
+        Assert.True(File.Exists(result.Path));
+    }
+
+    [Fact]
     public void The_interactive_bar_redraws_in_place_at_most_ten_times_a_second_and_always_shows_the_end()
     {
         // Interactive is the path a real console takes (output not redirected); the first redraw used to overflow.
