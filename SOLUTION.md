@@ -41,3 +41,15 @@ opening, since lines already streamed can't be taken back.
 Command timeouts aren't retried by default, because repeating a slow query adds load and multiplies the wait.
 When retries run out, the caller gets `Unavailable` with a generic message (`BackendUnavailable` over WCF), so clients
 know to try again later, instead of `Internal`, which means a bug.
+
+## Transactions, ACID and deadlocks
+
+There's only one explicit transaction, because every write is a single `INSERT`, which SQL Server already runs as its
+own atomic, durable transaction; balances are calculated, never stored, so there's never a second write to keep in step.
+The exception is statements, which read the opening balance and the lines in one `SNAPSHOT` transaction so both come
+from the same moment.
+The "look up the ref, then insert" check isn't wrapped in a transaction: stopping that race would take serializable
+range locks, which block and deadlock, so the unique constraint provides the guarantee instead.
+Deadlocks are unlikely by design: each write locks only its own row for one statement, nothing updates or deletes,
+every read uses row versions instead of shared locks (`SNAPSHOT` for statements, `READ_COMMITTED_SNAPSHOT` for balances
+and ref lookups), so reads and writes never wait on each other, and a deadlock victim is retried.
