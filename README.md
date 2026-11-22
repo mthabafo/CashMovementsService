@@ -24,6 +24,22 @@ Run instructions, ports and configuration are in [CashMovements.Wcf/README.md](C
 | 5146 | gRPC-Web (HTTP/1.1), used by the WCF gateway |
 | 8095 | WCF gateway (net.tcp) |
 
+## Database failures and retries
+
+Transient database failures (a failed or dropped connection, a failover, a deadlock) are retried up to 3 times, with a
+delay that starts at 200 ms and doubles each time (with jitter), and no new retry starts after 5 seconds. Retrying stops
+as soon as the caller cancels or its deadline passes. If retries run out, the call fails with `Unavailable` (the WCF
+gateway returns `BackendUnavailable`). Command timeouts aren't retried by default, and a statement that has started
+streaming isn't retried: the client asks again. Settings are under `Database:Retry` in `appsettings.json`.
+
+For retries to help, set these in each environment's connection string:
+
+| Setting | Suggested | Why |
+|---|---|---|
+| `Connect Timeout` | `2` to `5` | Fail fast when the server is down, so several attempts fit in the 5-second retry window (default 15 s) |
+| `Pool Blocking Period` | `NeverBlock` | Otherwise, after a failed connection, SqlClient fails new attempts straight away for 5 s or more, so retries can't succeed |
+| `ConnectRetryCount` / `ConnectRetryInterval` | `3` / `2` | SqlClient quietly re-establishes broken idle pooled connections, for example after a failover |
+
 ## Automated tests
 
 ```powershell
