@@ -1,5 +1,37 @@
 # CashMovements – solution notes
 
+## Architecture
+
+```mermaid
+flowchart TB
+    grpcClients["gRPC clients<br/>CashMovements.Grpc.Client (console)"]
+    legacyClients["Legacy WCF clients<br/>CashMovements.Wcf.Client (console)"]
+
+    grpcApi["<b>Modern gRPC API</b> · CashMovements.Grpc · .NET 8<br/>GetBalance · GetStatement (stream) · RecordMovement · ExportStatement (stream)<br/>Interceptors: exceptions → status codes · call logging and correlation IDs"]
+    wcf["<b>Legacy WCF gateway</b> · CashMovements.Wcf · .NET Framework 4.8<br/>NetTcp with Windows authentication · no business logic"]
+
+    app["<b>Application</b> · CashMovements.Application<br/>MovementService: idempotent recording · balances · streamed statements · business-event logs"]
+    domain["<b>Domain</b> · CashMovements.Domain<br/>Movement and value objects (validation rules) · statement calculator · IMovementRepository"]
+    infra["<b>Infrastructure</b> · CashMovements.Infrastructure<br/>Dapper over stored procedures · snapshot statements · retries (Polly)"]
+    sql[("<b>SQL Server</b><br/>dbo.Movement · unique (AccountId, ExternalRef) · clustered ledger index<br/>CHECK constraints · READ_COMMITTED_SNAPSHOT")]
+
+    grpcClients -->|HTTP/2| grpcApi
+    legacyClients -->|net.tcp| wcf
+    wcf -->|"gRPC-Web (HTTP/1.1)"| grpcApi
+    grpcApi --> app
+    app --> domain
+    app -->|"through IMovementRepository"| infra
+    infra -->|implements| domain
+    infra --> sql
+```
+
+Dependencies point inward (API → Application → Domain ← Infrastructure), enforced by architecture tests; the API refers
+to Infrastructure only in its composition root, `Program.cs`.
+The legacy gateway holds no business logic: it forwards to the same gRPC service over gRPC-Web, so both entry points
+share one implementation.
+Rules live in the Domain, the Application orchestrates them, and Infrastructure is the only layer that knows about SQL
+Server: Dapper over stored procedures, with balances and statements calculated from the single `Movement` table.
+
 ## Large statements (50,000+ rows): streaming
 
 Each statement row flows one at a time: SQL Server reads in index order with no sort, Dapper hands each row on
@@ -67,6 +99,16 @@ This fits because conflicts are rare (almost always a client retry), pessimistic
 queue and risk deadlocks, and an append-only ledger with calculated balances has no lost updates to prevent.
 There's no `rowversion` column because nothing is ever updated; if editing were added, an
 `UPDATE ... WHERE RowVersion = @Expected` check would be the natural fit.
+
+## Race conditions
+
+Four races are handled, each covered by a test against SQL Server.
+Two identical submissions at the same moment: the unique key lets one insert through, and the other is treated as a
+retry, so both callers get the same movement.
+A retry after a lost reply: if the first attempt was saved but its reply never arrived, the retry hits the unique key
+and gets the original back, so nothing is counted twice.
+Inserts during a statement: the statement reads one snapshot, so its opening balance, lines and export line count always
+agree; and reads during writes: snapshot reads mean balances and lookups never wait on or block an insert.
 
 ## Database failures: retries and `Unavailable`
 
