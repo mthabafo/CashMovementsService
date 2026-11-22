@@ -30,6 +30,20 @@ does, so nothing can be double-counted.
 If identical requests arrive at the same moment, the ones that lose the insert race catch the unique-key error, look
 the pair up again and are treated as retries, so every caller gets the original movement back.
 
+## Field conflicts
+
+A repeated `externalRef` for the same account whose amount or currency differs from the original is rejected with
+`AlreadyExists` and nothing is written, so it can never be double-counted; the same rule applies when the two requests
+arrive at the same moment.
+I chose an error over the alternatives because the caller is waiting and can fix it: silently returning the original
+would let them believe their different amount was recorded, accepting it or parking it for review suits batch imports
+rather than a live API, and a success with a "conflict" flag is easy to ignore.
+`AlreadyExists` is the gRPC code for "what you tried to create already exists"; `InvalidArgument` would be wrong because
+the request is valid on its own, and `Aborted` because retrying won't help.
+Only amount and currency are compared, the fields that change a balance (formatting doesn't matter: `100` equals
+`100.00`, `zar` equals `ZAR`); a re-submission with a different date or narration is treated as a retry and returns the
+original movement, so the caller can see from the response which values were actually recorded.
+
 ## Concurrent submissions
 
 Correctness never depends on timing: every decision that matters is made atomically by SQL Server, and the services hold
