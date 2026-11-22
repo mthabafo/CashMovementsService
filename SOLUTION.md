@@ -30,6 +30,30 @@ does, so nothing can be double-counted.
 If identical requests arrive at the same moment, the ones that lose the insert race catch the unique-key error, look
 the pair up again and are treated as retries, so every caller gets the original movement back.
 
+## Concurrent submissions
+
+Correctness never depends on timing: every decision that matters is made atomically by SQL Server, and the services hold
+no state or in-memory locks, so any number of calls can run at once.
+Different movements never wait on each other, because each is a single-row insert and balances are calculated rather
+than stored, so there's no shared row to contend for or lose an update on; identical submissions get the original
+movement, and conflicting ones get `AlreadyExists`.
+Reads use row versions (`READ_COMMITTED_SNAPSHOT`, `SNAPSHOT` for statements), so balances and statements never block
+or are blocked by inserts.
+Tests cover simultaneous identical requests over gRPC and SQL Server and a mixed workload of writers and readers with
+no retries to hide deadlocks; the limits are that it's tested at this scale only, and a very busy account's inserts
+compete for the same index pages (a throughput limit, not a correctness one).
+
+## Optimistic concurrency control
+
+Concurrency control is optimistic: nothing is locked in advance, so a submission looks up its reference and inserts
+without holding a lock in between, and the rare conflict is detected by the unique key at insert time and resolved as a
+retry or `AlreadyExists`; reads use row versioning rather than shared locks.
+The only locks are the brief exclusive ones SQL Server takes on a new row within a single `INSERT`.
+This fits because conflicts are rare (almost always a client retry), pessimistic range locks would make every request
+queue and risk deadlocks, and an append-only ledger with calculated balances has no lost updates to prevent.
+There's no `rowversion` column because nothing is ever updated; if editing were added, an
+`UPDATE ... WHERE RowVersion = @Expected` check would be the natural fit.
+
 ## Database failures: retries and `Unavailable`
 
 Transient database failures (a failed or dropped connection, a failover, a deadlock) are retried in Infrastructure with
@@ -53,3 +77,17 @@ range locks, which block and deadlock, so the unique constraint provides the gua
 Deadlocks are unlikely by design: each write locks only its own row for one statement, nothing updates or deletes,
 every read uses row versions instead of shared locks (`SNAPSHOT` for statements, `READ_COMMITTED_SNAPSHOT` for balances
 and ref lookups), so reads and writes never wait on each other, and a deadlock victim is retried.
+
+## Indexes
+
+The table is clustered on `(AccountId, Currency, OccurredAt, Id)`, declared `UNIQUE` because `Id` is in the key, so rows
+are stored in ledger order: a balance is one range read, and a statement is one range read already in statement order,
+with no sort, which is what lets it stream.
+A unique index on `(AccountId, ExternalRef)` enforces the idempotency key and serves the duplicate-ref lookup, and a
+nonclustered primary key on `Id` gives each row a stable identity.
+Clustering on `Id` instead would have needed a second index that's almost a copy of the table to make balances and
+statements fast.
+The trade-offs: inserts land inside each account's range rather than at the end, so pages split a little more; the two
+smaller indexes are larger because each carries the wide clustered key; and a balance still reads every row for its
+account, so it slows as history grows (a stored running balance would fix that, at the cost of extra writes and a
+frequently updated row per account).
