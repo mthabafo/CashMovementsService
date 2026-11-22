@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Proto = CashMovements.Grpc.Contracts;
@@ -10,6 +11,7 @@ internal sealed class Commands(Proto.Movements.MovementsClient client, Cancellat
 {
     private static readonly TimeSpan UnaryDeadline = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StreamDeadline = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ExportDeadline = TimeSpan.FromMinutes(30);
 
     // balance <account> <currency>
     public async Task<int> BalanceAsync(CommandLine line)
@@ -51,6 +53,75 @@ internal sealed class Commands(Proto.Movements.MovementsClient client, Cancellat
 
         var footer = await StreamStatementAsync(account, currency, from, to);
         return footer is null ? 1 : 0;
+    }
+
+    // export <account> <currency> [--from <time>] [--to <time>] [--out <path>]
+    public async Task<int> ExportAsync(CommandLine line)
+    {
+        var account = line.Required(0, "account");
+        var currency = line.Required(1, "currency");
+        var to = line.TimeOption("to") ?? DateTimeOffset.UtcNow;
+        var from = line.TimeOption("from") ?? to.AddDays(-30);
+        var outputPath = line.Option("out");
+        line.EnsureNothingElse(2);
+
+        using var call = client.ExportStatement(
+            new Proto.ExportStatementRequest
+            {
+                AccountId = account,
+                Currency = currency,
+                From = Timestamp.FromDateTimeOffset(from),
+                To = Timestamp.FromDateTimeOffset(to),
+                Format = Proto.ExportFormat.Csv,
+            },
+            deadline: DateTime.UtcNow.Add(ExportDeadline),
+            cancellationToken: cancellationToken);
+
+        Console.WriteLine($"Exporting {account} {currency.ToUpperInvariant()} statement, {Output.Time(Timestamp.FromDateTimeOffset(from))} to {Output.Time(Timestamp.FromDateTimeOffset(to))}...");
+        var progress = new ProgressBar();
+        try
+        {
+            var result = await ExportDownloader.DownloadAsync(
+                ReadExport(call.ResponseStream, cancellationToken),
+                outputPath,
+                Environment.CurrentDirectory,
+                progress.Report,
+                cancellationToken);
+
+            progress.Finish();
+            Console.WriteLine($"  Saved      {result.Path}");
+            Console.WriteLine(FormattableString.Invariant($"  Lines      {result.LineCount:N0}, closing balance {result.ClosingBalance}"));
+            Console.WriteLine(FormattableString.Invariant($"  Size       {ProgressBar.Size(result.ByteCount)} in {result.Elapsed.TotalSeconds:0.0} s"));
+            Console.WriteLine("  Checksum   SHA-256 verified");
+            return 0;
+        }
+        catch (ExportIncompleteException ex)
+        {
+            progress.Finish();
+            Console.Error.WriteLine($"Export incomplete, no file kept: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            progress.Finish(); // end the progress line before Program reports an error or cancellation
+        }
+    }
+
+    /// <summary>The export's gRPC messages as <see cref="ExportMessage"/>s, which the downloader works with.</summary>
+    private static async IAsyncEnumerable<ExportMessage> ReadExport(
+        IAsyncStreamReader<Proto.ExportStatementResponse> stream,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var item in stream.ReadAllAsync(cancellationToken))
+        {
+            yield return item.ItemCase switch
+            {
+                Proto.ExportStatementResponse.ItemOneofCase.Start => new ExportMessage.Start(item.Start.FileName, item.Start.LineCount),
+                Proto.ExportStatementResponse.ItemOneofCase.Chunk => new ExportMessage.Chunk(item.Chunk.Data.Memory, item.Chunk.LinesWritten),
+                Proto.ExportStatementResponse.ItemOneofCase.End => new ExportMessage.End(item.End.ClosingBalance, item.End.LineCount, item.End.ByteCount, item.End.Sha256),
+                _ => throw new ExportIncompleteException($"Unexpected message '{item.ItemCase}' in the export."),
+            };
+        }
     }
 
     // demo [<account>]

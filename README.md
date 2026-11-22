@@ -40,6 +40,18 @@ For retries to help, set these in each environment's connection string:
 | `Pool Blocking Period` | `NeverBlock` | Otherwise, after a failed connection, SqlClient fails new attempts straight away for 5 s or more, so retries can't succeed |
 | `ConnectRetryCount` / `ConnectRetryInterval` | `3` / `2` | SqlClient quietly re-establishes broken idle pooled connections, for example after a failover |
 
+## Statement export
+
+`ExportStatement` streams a statement as a CSV file: a start message with the file name and line count, the file in
+64 KB chunks, and an end message with the closing balance, byte count and SHA-256. The client's `export` command saves
+it with a progress bar and keeps the file only if it checks out:
+
+```powershell
+dotnet run --project CashMovements.Grpc.Client -- export ACC-VOLUME ZAR --from 2026-01-01 --to 2026-12-01
+```
+
+`ACC-VOLUME` (150,000 movements) is seeded by `004_seed_volume.sql`, which only the development auto-setup runs.
+
 ## Logging
 
 Both services write structured logs to the console: readable single lines in development, and JSON (one object per
@@ -62,6 +74,7 @@ WCF gateway uses `LogFormat` in its `App.config`.
 | 2001 | `GrpcCallCompleted` | Information, Warning for server-side failures | Every gRPC call ends (`StatusCode`, `ElapsedMs`) |
 | 2002 | `StorageUnavailable` | Warning | The database is unavailable after retries |
 | 2003 | `UnhandledError` | Error | An unexpected error, reported to the caller as `Internal` |
+| 2101 | `StatementExported` | Information | A statement export finished (`LineCount`, `ByteCount`, `ElapsedMs`) |
 | 3001 | `DatabaseRetry` | Warning | A transient database failure is retried |
 | 4001–4004 | `BalanceReturned`, `BalanceRejected`, `BackendUnavailable`, `BalanceFailed` | Information to Error | The WCF gateway's outcome for each call |
 

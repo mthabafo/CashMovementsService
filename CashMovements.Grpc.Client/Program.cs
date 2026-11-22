@@ -16,17 +16,20 @@ const string CommandHelp = """
       balance   <account> <currency>
       record    <account> <ref> <amount> <currency> [--at <time>] [--narration <text>]
       statement <account> <currency> [--from <time>] [--to <time>]
+      export    <account> <currency> [--from <time>] [--to <time>] [--out <path>]
       demo      [<account>]
 
     Amounts are sent exactly as typed: signed, '.' as decimal separator (e.g. 100, -249.50).
     Times without an offset are local time; a bare date means midnight (e.g. 2026-11-01, 2026-11-01T14:30, 2026-11-01T12:30Z).
-    record --at defaults to now; statement defaults to the 30 days before --to (default now).
+    record --at defaults to now; statement and export default to the 30 days before --to (default now).
+    export saves a CSV (with a progress bar) to --out, a file or folder; by default the server's file name here.
     Quote values with spaces: --narration "Card payment".
 
     Examples:
       balance ACC-1001 ZAR
       record ACC-1001 PAY-77 -149.50 ZAR --narration "Groceries"
       statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
+      export ACC-VOLUME ZAR --from 2026-01-01      (150,000 lines, seeded in development)
       demo
     """;
 
@@ -152,6 +155,7 @@ async Task<int> RunAsync(CommandLine line)
             "balance" => await commands.BalanceAsync(line),
             "record" => await commands.RecordAsync(line),
             "statement" => await commands.StatementAsync(line),
+            "export" => await commands.ExportAsync(line),
             "demo" => await commands.DemoAsync(line),
             _ => UsageError($"Unknown command '{line.Command}'."),
         };

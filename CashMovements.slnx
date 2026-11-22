@@ -5,6 +5,7 @@
     <File Path="001_schema.sql" />
     <File Path="002_procedures.sql" />
     <File Path="003_seed.sql" />
+    <File Path="004_seed_volume.sql" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="CashMovements.Application/CashMovements.Application.csproj" />

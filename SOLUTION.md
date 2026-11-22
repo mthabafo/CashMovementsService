@@ -118,6 +118,32 @@ movements, and checks the WCF gateway over net.tcp and gRPC return the same bala
 The limits: the legacy side offers only balances, and the test calls gRPC over gRPC-Web, because .NET Framework can't
 use HTTP/2 without TLS (other tests show gRPC-Web and HTTP/2 give the same results).
 
+## Statement export
+
+`ExportStatement` streams a statement as a CSV file built from the same streamed statement, in 64 KB chunks, so the
+server holds one chunk at a time: 150,000 lines (10.6 MB) export in about 1.5 s with live memory growing about 3 MB,
+where a server that built the file first grew 11.5 MB and failed the volume test.
+The start message carries the line count, from a count run inside the statement's own snapshot so it always matches,
+which gives the client a real progress bar; the end message carries the closing balance, byte count and SHA-256.
+The file is self-contained (opening, movement and closing rows), UTF-8 with a byte-order mark for Excel, escaped per
+RFC 4180, and guarded against formula injection.
+I chose streaming over an export job with a download link, which would need a job store, file storage and clean-up;
+the trade-off is that the client must stay connected for the whole export.
+The console client's `export` command writes to a `.partial` file with a live progress bar and keeps it only when the
+checksum and counts match, deleting it on any failure or Ctrl+C.
+
+## Structured logging
+
+Logs are structured at the points that matter: the business events (a movement recorded, a retry replayed, a field
+conflict as a warning, a statement completed or ended early), one summary per gRPC call with its status code and
+duration, database retries and outages, and each WCF gateway outcome, all with fixed event IDs for filtering and alerts.
+Every log written during a call carries a correlation ID, taken from the caller's `x-correlation-id` header or
+generated, and returned in the trailers; the WCF gateway sends its own, so one legacy call can be followed across both
+processes.
+Output is JSON outside development and readable lines in development, using .NET's built-in formatter.
+Account IDs are masked to their last 4 characters, and amounts, narrations and connection strings are never logged,
+because the database is the financial record and logs are seen by many more people.
+
 ## Simplifications
 
 Deliberate simplifications, each with what a production system would do instead.

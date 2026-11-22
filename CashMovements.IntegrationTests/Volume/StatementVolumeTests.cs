@@ -35,6 +35,10 @@ public sealed class StatementVolumeTests : IDisposable
     // Measured growth while streaming: ~0.1 MB. With the server deliberately changed to read every line into memory
     // before sending (the regression this guards against), growth was ~52 MB and this test failed.
     private const long MaxLiveMemoryGrowthBytes = 20 * 1024 * 1024;
+
+    // The export is 10.6 MB of CSV, so a server that built the file before sending would grow by at least that much.
+    // Measured growth while streaming: ~2 MB.
+    private const long MaxExportMemoryGrowthBytes = 8 * 1024 * 1024;
     private const int MemorySampleEvery = 25_000;
 
     // A fixed period in the past (Movement rules reject future dates); lines are 0.5 s apart on average.
@@ -157,6 +161,89 @@ public sealed class StatementVolumeTests : IDisposable
             $"Statement took {total.Elapsed.TotalSeconds:F1} s; expected under {MaxTotalTime.TotalSeconds} s.");
         Assert.True(growth < MaxLiveMemoryGrowthBytes,
             $"Live memory grew by {Mb(growth)} while streaming; expected under {Mb(MaxLiveMemoryGrowthBytes)}. Is the statement being buffered?");
+    }
+
+    [Fact]
+    public async Task Export_of_150000_lines_streams_with_flat_memory_and_a_matching_checksum()
+    {
+        await SeedAsync();
+        var expectedClosing = EarlierMovements * EarlierAmount + Enumerable.Range(1, Lines).Sum(LineAmount);
+
+        // Warm up with a one-line export, then take the memory baseline (as for the statement test above).
+        await ExportAsync(From.AddMinutes(-1), From, _ => { });
+        var baselineMemory = LiveMemory();
+        var peakMemory = baselineMemory;
+
+        var total = Stopwatch.StartNew();
+        TimeSpan? timeToFirstChunk = null;
+        var chunks = 0;
+
+        var (start, end, sha256, bytes) = await ExportAsync(From, To, chunk =>
+        {
+            chunks++;
+            timeToFirstChunk ??= total.Elapsed;
+            if (chunks == 1 || chunks % 50 == 0) // a buffering server holds the whole file by the first chunk
+                peakMemory = Math.Max(peakMemory, LiveMemory());
+        });
+
+        total.Stop();
+        var growth = peakMemory - baselineMemory;
+        _output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"First chunk after {timeToFirstChunk?.TotalMilliseconds:F0} ms; {chunks:N0} chunks, {bytes / (1024.0 * 1024):F1} MB in {total.Elapsed.TotalSeconds:F1} s"));
+        _output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Live memory before the call {Mb(baselineMemory)}, peak while exporting {Mb(peakMemory)}, growth {Mb(growth)}"));
+
+        Assert.Equal(Lines, start.LineCount);
+        Assert.Equal(Lines, end.LineCount);
+        Assert.Equal(Format(expectedClosing), end.ClosingBalance);
+        Assert.Equal(bytes, end.ByteCount);
+        Assert.Equal(sha256, end.Sha256);
+        Assert.True(timeToFirstChunk < MaxTimeToFirstLine,
+            $"First chunk took {timeToFirstChunk?.TotalSeconds:F1} s; expected under {MaxTimeToFirstLine.TotalSeconds} s. Is the export being buffered?");
+        Assert.True(total.Elapsed < MaxTotalTime, $"Export took {total.Elapsed.TotalSeconds:F1} s; expected under {MaxTotalTime.TotalSeconds} s.");
+        Assert.True(growth < MaxExportMemoryGrowthBytes,
+            $"Live memory grew by {Mb(growth)} while exporting; expected under {Mb(MaxExportMemoryGrowthBytes)}. Is the export being buffered?");
+    }
+
+    /// <summary>Runs an export, hashing the bytes as they arrive without keeping them (so the test itself stays flat).</summary>
+    private async Task<(Proto.ExportStart Start, Proto.ExportEnd End, string Sha256, long Bytes)> ExportAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        Action<Proto.ExportChunk> onChunk)
+    {
+        using var call = _host.Client.ExportStatement(new Proto.ExportStatementRequest
+        {
+            AccountId = _account,
+            Currency = "ZAR",
+            From = Timestamp.FromDateTimeOffset(from),
+            To = Timestamp.FromDateTimeOffset(to),
+            Format = Proto.ExportFormat.Csv,
+        });
+
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        Proto.ExportStart? start = null;
+        Proto.ExportEnd? end = null;
+        long bytes = 0;
+
+        await foreach (var item in call.ResponseStream.ReadAllAsync())
+        {
+            switch (item.ItemCase)
+            {
+                case Proto.ExportStatementResponse.ItemOneofCase.Start:
+                    start = item.Start;
+                    break;
+                case Proto.ExportStatementResponse.ItemOneofCase.Chunk:
+                    hash.AppendData(item.Chunk.Data.Span);
+                    bytes += item.Chunk.Data.Length;
+                    onChunk(item.Chunk);
+                    break;
+                case Proto.ExportStatementResponse.ItemOneofCase.End:
+                    end = item.End;
+                    break;
+            }
+        }
+
+        Assert.NotNull(start);
+        Assert.NotNull(end);
+        return (start, end, Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), bytes);
     }
 
     /// <summary>

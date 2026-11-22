@@ -178,6 +178,26 @@ public sealed class MovementRepositoryTests
     }
 
     [Fact]
+    public async Task The_line_count_comes_from_the_statement_snapshot_so_it_always_matches_the_lines()
+    {
+        await Add("IN-1", 10m, T0.AddDays(1));
+        await Add("IN-2", 20m, T0.AddDays(2));
+        await Add("AFTER", 30m, T0.AddDays(20)); // outside the period
+
+        await using var statement = await _repository.OpenStatementAsync(Account, Zar, T0, T0.AddDays(10), default);
+
+        // Committed by another connection after the snapshot was taken, inside the period: an export's progress total
+        // must not count it, because the lines won't include it.
+        await Add("LATE-IN", 40m, T0.AddDays(3));
+
+        var count = await statement.CountLinesAsync(default);
+        var refs = await RefsAsync(statement.Movements);
+
+        Assert.Equal(2, count);
+        Assert.Equal(new[] { "IN-1", "IN-2" }, refs);
+    }
+
+    [Fact]
     public async Task Statement_with_no_movements_in_the_period_is_empty()
     {
         await using var statement = await _repository.OpenStatementAsync(Account, Zar, T0, T0.AddDays(1), default);

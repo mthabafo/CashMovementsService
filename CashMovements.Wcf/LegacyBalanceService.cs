@@ -35,11 +35,7 @@ public sealed class LegacyBalanceService : ILegacyBalanceService
         var account = GatewayLog.MaskAccount(accountId);
         var stopwatch = Stopwatch.StartNew();
 
-        using var scope = _logger.BeginScope(new Dictionary<string, object>
-        {
-            ["Operation"] = "GetBalance",
-            ["CorrelationId"] = correlationId,
-        });
+        using var scope = _logger.BeginScope(new LogScope(("Operation", "GetBalance"), ("CorrelationId", correlationId)));
 
         try
         {

@@ -24,6 +24,11 @@ service Movements {
 
   // Idempotent per (account_id, external_ref): a retry with the same amount and currency returns the original movement.
   rpc RecordMovement (RecordMovementRequest) returns (RecordMovementResponse);
+
+  // Streams a statement as a file: exactly one start, then the file's bytes in chunks (in order), then exactly one end.
+  // The start carries the line count, for progress; the end carries a SHA-256 of all the bytes, to check the file.
+  // If the call fails part-way, the stream ends with an error status and no end: discard the partial file.
+  rpc ExportStatement (ExportStatementRequest) returns (stream ExportStatementResponse);
 }
 
 // ---------- Shared ----------
@@ -87,6 +92,49 @@ message StatementLine {
 message StatementFooter {
   string closing_balance = 1;
   int32 line_count = 2;
+}
+
+// ---------- ExportStatement ----------
+
+message ExportStatementRequest {
+  string account_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp from = 3; // inclusive
+  google.protobuf.Timestamp to = 4;   // exclusive
+  ExportFormat format = 5;            // EXPORT_FORMAT_UNSPECIFIED means CSV
+}
+
+enum ExportFormat {
+  EXPORT_FORMAT_UNSPECIFIED = 0;
+  // RFC 4180 CSV, UTF-8 with a byte-order mark. Columns: Type, OccurredAt, MovementId, ExternalRef, Narration, Amount,
+  // RunningBalance. One Opening row, one Movement row per statement line, one Closing row.
+  EXPORT_FORMAT_CSV = 1;
+}
+
+message ExportStatementResponse {
+  oneof item {
+    ExportStart start = 1;
+    ExportChunk chunk = 2;
+    ExportEnd end = 3;
+  }
+}
+
+message ExportStart {
+  string file_name = 1;    // suggested name, safe for file systems
+  string content_type = 2; // e.g. "text/csv"
+  int32 line_count = 3;    // statement lines that will follow (Opening and Closing rows not included)
+}
+
+message ExportChunk {
+  bytes data = 1;          // the next bytes of the file
+  int32 lines_written = 2; // statement lines written so far, including this chunk
+}
+
+message ExportEnd {
+  string closing_balance = 1;
+  int32 line_count = 2;
+  int64 byte_count = 3;
+  string sha256 = 4;       // lowercase hex SHA-256 of all the chunks' bytes
 }
 
 // ---------- RecordMovement ----------

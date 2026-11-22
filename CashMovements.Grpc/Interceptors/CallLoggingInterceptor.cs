@@ -70,11 +70,7 @@ public sealed partial class CallLoggingInterceptor : Interceptor
         var correlationId = CorrelationIdFrom(context.RequestHeaders) ?? Guid.NewGuid().ToString("N");
         context.ResponseTrailers.Add(CorrelationHeader, correlationId);
 
-        return _logger.BeginScope(new Dictionary<string, object>
-        {
-            ["GrpcMethod"] = context.Method,
-            ["CorrelationId"] = correlationId,
-        });
+        return _logger.BeginScope(new LogScope(("GrpcMethod", context.Method), ("CorrelationId", correlationId)));
     }
 
     private void Completed(ServerCallContext context, StatusCode status, long started)

@@ -33,8 +33,8 @@ internal static partial class ApplicationLog
     public static partial void StatementEndedEarly(ILogger logger, string account, string currency, DateTimeOffset from, DateTimeOffset to, string reason, int lineCount, double elapsedMs);
 }
 
-/// <summary>Masks identifiers before they're logged.</summary>
-internal static class LogMask
+/// <summary>Masks identifiers before they're logged. Public so every layer masks the same way.</summary>
+public static class LogMask
 {
     /// <summary>Only the last 4 characters: <c>ACC-1001</c> becomes <c>****1001</c>; 4 characters or fewer become <c>****</c>.</summary>
     public static string Account(string? accountId)

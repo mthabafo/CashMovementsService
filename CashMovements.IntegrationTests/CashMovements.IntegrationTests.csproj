@@ -49,6 +49,8 @@
     <ProjectReference Include="..\CashMovements.Domain\CashMovements.Domain.csproj" />
     <ProjectReference Include="..\CashMovements.Infrastructure\CashMovements.Infrastructure.csproj" />
     <ProjectReference Include="..\CashMovements.Grpc\CashMovements.Grpc.csproj" />
+    <!-- The client's ExportDownloader is tested against the in-memory host. -->
+    <ProjectReference Include="..\CashMovements.Grpc.Client\CashMovements.Grpc.Client.csproj" />
   </ItemGroup>
 
 </Project>

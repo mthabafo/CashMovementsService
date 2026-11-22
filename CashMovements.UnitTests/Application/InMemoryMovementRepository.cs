@@ -90,7 +90,7 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
             .ThenBy(m => m.Id)
             .ToList();
 
-        return Task.FromResult(new StatementSource(opening, Stream(rows), new Release(() => OpenSources--)));
+        return Task.FromResult(new StatementSource(opening, Stream(rows), new Release(() => OpenSources--), _ => Task.FromResult(rows.Count)));
     }
 
     private async IAsyncEnumerable<Movement> Stream(

@@ -116,7 +116,13 @@ public sealed class MovementRepository : IMovementRepository
                     // The caller's token, not the attempt's: the lines are read after this method has returned.
                     var movements = ReadInPeriodAsync(connection, transaction, accountId, currency, from, to, cancellationToken);
 
-                    return new StatementSource(opening, movements, new Snapshot(connection, transaction));
+                    // Counting (only when asked, for an export) runs on this connection and transaction before the
+                    // lines are read, so it sees the same snapshot and always matches them.
+                    return new StatementSource(
+                        opening,
+                        movements,
+                        new Snapshot(connection, transaction),
+                        countToken => CountInPeriodAsync(connection, transaction, accountId, currency, from, to, countToken));
                 }
                 catch
                 {
@@ -150,6 +156,30 @@ public sealed class MovementRepository : IMovementRepository
         }
         catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
         {
+            throw new StorageUnavailableException(sql);
+        }
+    }
+
+    private static async Task<int> CountInPeriodAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        AccountId accountId,
+        Currency currency,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await connection.ExecuteScalarAsync<int>(Command(
+                Procedures.CountInPeriod,
+                new { AccountId = accountId.Value, Currency = currency.Code, From = from, To = to },
+                transaction,
+                cancellationToken));
+        }
+        catch (Exception ex) when (SqlFailures.IsUnavailable(ex, cancellationToken, out var sql))
+        {
+            // Not retried: it runs inside the statement's snapshot, which a retry couldn't reopen.
             throw new StorageUnavailableException(sql);
         }
     }
@@ -219,6 +249,7 @@ public sealed class MovementRepository : IMovementRepository
         public const string Insert = "dbo.usp_Movement_Insert";
         public const string SumAmounts = "dbo.usp_Movement_SumAmounts";
         public const string ListInPeriod = "dbo.usp_Movement_ListInPeriod";
+        public const string CountInPeriod = "dbo.usp_Movement_CountInPeriod";
     }
 
     /// <summary>One row of dbo.Movement, exactly as the procedures return it.</summary>

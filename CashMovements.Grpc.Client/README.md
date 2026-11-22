@@ -36,6 +36,7 @@ At the `cashmovements.grpc>` prompt (or as arguments for a one-off run):
 | `balance <account> <currency>` | `GetBalance` |
 | `record <account> <ref> <amount> <currency> [--at <time>] [--narration <text>]` | `RecordMovement`; `--at` defaults to now |
 | `statement <account> <currency> [--from <time>] [--to <time>]` | `GetStatement`; defaults to the 30 days before `--to` (default now) |
+| `export <account> <currency> [--from <time>] [--to <time>] [--out <path>]` | `ExportStatement`: saves the statement as CSV with a progress bar (same period defaults) |
 | `demo [<account>]` | A scripted check on a fresh account: record, retry, conflicting reuse, invalid amount, balance, statement |
 | `help`, `clear`, `exit` | Prompt only |
 
@@ -43,9 +44,14 @@ At the `cashmovements.grpc>` prompt (or as arguments for a one-off run):
 cashmovements.grpc> balance ACC-1001 ZAR
 cashmovements.grpc> record ACC-1001 PAY-77 -149.50 ZAR --narration "Groceries"
 cashmovements.grpc> statement ACC-1001 ZAR --from 2026-10-01 --to 2026-12-01
+cashmovements.grpc> export ACC-VOLUME ZAR --from 2026-01-01 --to 2026-12-01
 ```
 
-- The seed data has accounts `ACC-1001` (ZAR and USD) and `ACC-2002` (ZAR, overdrawn).
+- The seed data has accounts `ACC-1001` (ZAR and USD) and `ACC-2002` (ZAR, overdrawn). In development, `ACC-VOLUME`
+  has 150,000 ZAR movements (January to July 2026) for trying a large export.
+- `export` saves to `--out` (a file or a folder); by default the server's file name in the current folder. It writes
+  to `<file>.partial` and renames it only after the SHA-256, byte count and line count match the server's; otherwise,
+  or on Ctrl+C, the partial file is deleted and the command fails.
 - Amounts are sent exactly as typed, so invalid input (`1,5`, `1.005`, `0`) can be tried to see the server reject it.
 - Times without an offset are local time; a bare date means midnight. Output times are UTC.
 - Server errors are printed as `<StatusCode>: <detail>`, for example `AlreadyExists: ...`.

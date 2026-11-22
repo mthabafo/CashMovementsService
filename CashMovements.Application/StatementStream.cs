@@ -14,17 +14,32 @@ namespace CashMovements.Application;
 public sealed class StatementStream : IAsyncDisposable
 {
     private readonly IAsyncDisposable _source;
+    private readonly Func<CancellationToken, Task<int>>? _countLines;
 
-    public StatementStream(StatementHeader header, IAsyncEnumerable<StatementLine> lines, IAsyncDisposable source)
+    public StatementStream(
+        StatementHeader header,
+        IAsyncEnumerable<StatementLine> lines,
+        IAsyncDisposable source,
+        Func<CancellationToken, Task<int>>? countLines = null)
     {
         Header = header ?? throw new ArgumentNullException(nameof(header));
         Lines = lines ?? throw new ArgumentNullException(nameof(lines));
         _source = source ?? throw new ArgumentNullException(nameof(source));
+        _countLines = countLines;
     }
 
     public StatementHeader Header { get; }
 
     public IAsyncEnumerable<StatementLine> Lines { get; }
+
+    /// <summary>
+    /// How many lines <see cref="Lines"/> will yield, from the same database snapshot, so it always matches. Costs one
+    /// extra query, so it's only run when asked for (an export's progress total). Call it before enumerating the lines.
+    /// </summary>
+    public Task<int> CountLinesAsync(CancellationToken cancellationToken)
+        => _countLines is null
+            ? throw new NotSupportedException("This statement can't count its lines.")
+            : _countLines(cancellationToken);
 
     public ValueTask DisposeAsync() => _source.DisposeAsync();
 }

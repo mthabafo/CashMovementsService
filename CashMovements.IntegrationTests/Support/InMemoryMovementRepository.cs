@@ -73,7 +73,10 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
 
         Interlocked.Increment(ref _openSources);
         return Task.FromResult(new StatementSource(
-            opening, Stream(rows), new Release(() => Interlocked.Decrement(ref _openSources))));
+            opening,
+            Stream(rows),
+            new Release(() => Interlocked.Decrement(ref _openSources)),
+            _ => Task.FromResult(rows.Count))); // same snapshot as the rows, like the real repository
     }
 
     private async IAsyncEnumerable<Movement> Stream(

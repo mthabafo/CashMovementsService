@@ -56,7 +56,7 @@ public sealed class MovementService : IMovementService
         {
             var header = StatementHeader.Create(account, ccy, from, to, source.OpeningBalance);
 
-            return new StatementStream(header, StreamLinesAsync(header, source.Movements, cancellationToken), source);
+            return new StatementStream(header, StreamLinesAsync(header, source.Movements, cancellationToken), source, source.CountLinesAsync);
         }
         catch
         {

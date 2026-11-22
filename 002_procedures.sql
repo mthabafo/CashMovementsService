@@ -61,6 +61,26 @@ BEGIN
 END;
 GO
 
+-- Number of movements in [@From, @To): the same range as usp_Movement_ListInPeriod, for an export's progress total.
+-- Run in the statement's snapshot transaction, so it always matches the lines that are then streamed.
+CREATE OR ALTER PROCEDURE dbo.usp_Movement_CountInPeriod
+    @AccountId NVARCHAR(34),
+    @Currency  CHAR(3),
+    @From      DATETIMEOFFSET(7),
+    @To        DATETIMEOFFSET(7)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT COUNT(*) AS LineCount
+    FROM dbo.Movement
+    WHERE AccountId = @AccountId
+      AND Currency = @Currency
+      AND OccurredAt >= @From
+      AND OccurredAt < @To;
+END;
+GO
+
 -- Movements in [@From, @To), in statement order. The ORDER BY matches the clustered index, so rows are
 -- returned as they are read (no sort), which is what lets the statement stream to the client.
 CREATE OR ALTER PROCEDURE dbo.usp_Movement_ListInPeriod
