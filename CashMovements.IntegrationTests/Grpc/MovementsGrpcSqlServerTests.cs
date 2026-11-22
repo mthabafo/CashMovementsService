@@ -58,6 +58,39 @@ public sealed class MovementsGrpcSqlServerTests : IDisposable
         Assert.Equal("850.50", items[^1].Footer.ClosingBalance);
     }
 
+    [Fact]
+    public async Task Identical_requests_sent_at_the_same_time_all_get_the_original_movement_and_count_once()
+    {
+        // Every request looks up the ref, finds nothing and tries to insert; SQL Server's unique key lets one through.
+        // The others must come back as retries (the same movement), not AlreadyExists. Timing decides whether a given
+        // round actually races, so run several rounds; MovementServiceTests covers the race deterministically.
+        const int rounds = 20;
+        const int parallelRequests = 10;
+        var client = _host.Client;
+
+        for (var round = 0; round < rounds; round++)
+        {
+            var request = Request($"PAR-{round}", "10", daysAgo: 1);
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var calls = Enumerable.Range(0, parallelRequests)
+                .Select(_ => Task.Run(async () =>
+                {
+                    await start.Task;
+                    return await client.RecordMovementAsync(request);
+                }))
+                .ToList();
+
+            start.SetResult();
+            var responses = await Task.WhenAll(calls); // throws if any call failed, e.g. with AlreadyExists
+
+            Assert.Single(responses.Select(r => r.Movement.Id).Distinct());
+        }
+
+        var balance = await client.GetBalanceAsync(new Proto.GetBalanceRequest { AccountId = _account, Currency = "ZAR" });
+        Assert.Equal((rounds * 10m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), balance.Amount);
+    }
+
     private Proto.RecordMovementRequest Request(string externalRef, string amount, int daysAgo)
         => new()
         {

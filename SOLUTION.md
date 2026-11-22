@@ -21,3 +21,13 @@ the database repeats the critical rules (CHECK constraints, `DECIMAL(19,2)`, a c
 line of defence.
 Bad input becomes `InvalidArgument` and duplicates `AlreadyExists`, but a corrupt stored row is reported as `Internal`
 and logged, because the caller isn't at fault.
+
+## Uniqueness and idempotent re-submissions
+
+`(AccountId, ExternalRef)` is the idempotency key: unique per account, not globally, and case-sensitive.
+Before inserting, the service looks the pair up: a re-submission with the same amount and currency is a retry and gets
+the original movement back without inserting, while a different amount or currency is rejected as `AlreadyExists`.
+A unique constraint in SQL Server (binary collation) guarantees there's never a second row, whatever the application
+does, so nothing can be double-counted.
+If identical requests arrive at the same moment, the ones that lose the insert race catch the unique-key error, look
+the pair up again and are treated as retries, so every caller gets the original movement back.

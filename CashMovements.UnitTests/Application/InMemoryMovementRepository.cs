@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using CashMovements.Domain.Entities;
+using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.Interfaces;
 using CashMovements.Domain.ReadModels;
 using CashMovements.Domain.ValueObjects;
@@ -26,12 +27,36 @@ internal sealed class InMemoryMovementRepository : IMovementRepository
     /// <summary>Seeds an already-persisted movement directly, bypassing the service.</summary>
     public void Seed(Movement movement) => _movements.Add(movement);
 
+    private bool _simulateConcurrentInsert;
+    private Movement? _concurrentWinner;
+
+    /// <summary>
+    /// Makes the next <see cref="AddAsync"/> behave as if another request inserted the same (account, ref) just before
+    /// it: <paramref name="winner"/> (if any) is stored and the call fails with <see cref="DuplicateMovementException"/>,
+    /// exactly like losing the race to SQL Server's unique key.
+    /// </summary>
+    public void SimulateConcurrentInsert(Movement? winner)
+    {
+        _simulateConcurrentInsert = true;
+        _concurrentWinner = winner;
+    }
+
     public Task<Movement?> FindByExternalRefAsync(AccountId accountId, ExternalRef externalRef, CancellationToken cancellationToken)
         => Task.FromResult(_movements.SingleOrDefault(m => m.AccountId == accountId && m.ExternalRef == externalRef));
 
     public Task<Movement> AddAsync(Movement movement, CancellationToken cancellationToken)
     {
         AddCalls++;
+
+        if (_simulateConcurrentInsert)
+        {
+            _simulateConcurrentInsert = false;
+            if (_concurrentWinner is not null)
+                _movements.Add(_concurrentWinner);
+
+            throw new DuplicateMovementException(movement.ExternalRef);
+        }
+
         var stored = Movement.Rehydrate(
             _movements.Count + 1,
             movement.AccountId.Value,

@@ -94,6 +94,53 @@ public class MovementServiceTests
         Assert.Equal("Original", retry.Narration);
     }
 
+    // Two identical requests at the same moment: both look up the ref and find nothing, then the database's unique key
+    // lets only one insert through. The one that loses must be treated as a retry, not reported as a duplicate.
+
+    private static Movement Stored(long id, decimal amount, string currency = "ZAR")
+        => Movement.Rehydrate(id, "ACC1", "REF-1", amount, currency, Now.AddDays(-1), null);
+
+    [Fact]
+    public async Task Losing_the_insert_race_to_an_identical_request_returns_the_winners_movement()
+    {
+        _repository.SimulateConcurrentInsert(Stored(id: 42, amount: 100m));
+
+        var recorded = await _service.RecordMovementAsync(New(100m), default);
+
+        Assert.Equal(42, recorded.Id);
+        Assert.Equal(1, _repository.AddCalls);
+        Assert.Single(_repository.Movements);
+    }
+
+    [Fact]
+    public async Task Losing_the_insert_race_to_a_different_amount_is_a_duplicate()
+    {
+        _repository.SimulateConcurrentInsert(Stored(id: 42, amount: 999m));
+
+        var ex = await Assert.ThrowsAsync<DuplicateMovementException>(
+            () => _service.RecordMovementAsync(New(100m), default));
+
+        Assert.Equal("REF-1", ex.ExternalRef.Value);
+    }
+
+    [Fact]
+    public async Task Losing_the_insert_race_to_a_different_currency_is_a_duplicate()
+    {
+        _repository.SimulateConcurrentInsert(Stored(id: 42, amount: 100m, currency: "USD"));
+
+        await Assert.ThrowsAsync<DuplicateMovementException>(
+            () => _service.RecordMovementAsync(New(100m), default));
+    }
+
+    [Fact]
+    public async Task A_duplicate_error_with_no_existing_row_is_not_swallowed()
+    {
+        _repository.SimulateConcurrentInsert(winner: null);
+
+        await Assert.ThrowsAsync<DuplicateMovementException>(
+            () => _service.RecordMovementAsync(New(100m), default));
+    }
+
     // ---- GetBalanceAsync ----
 
     [Fact]
