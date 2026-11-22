@@ -11,7 +11,8 @@ namespace CashMovements.Wcf;
 public interface IBalanceBackend
 {
     /// <summary>Calls the backend's GetBalance. Failures surface as <see cref="RpcException"/>.</summary>
-    Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency);
+    /// <param name="correlationId">Sent as <c>x-correlation-id</c>, so the server logs the call under the same ID.</param>
+    Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency, string correlationId);
 }
 
 /// <summary>
@@ -23,6 +24,9 @@ public sealed class GrpcBalanceBackend : IBalanceBackend, IDisposable
     private readonly GrpcChannel _channel;
     private readonly Proto.Movements.MovementsClient _client;
     private readonly TimeSpan _timeout;
+
+    /// <summary>The header the gRPC server reads its correlation ID from.</summary>
+    public const string CorrelationHeader = "x-correlation-id";
 
     public GrpcBalanceBackend(Uri address, TimeSpan timeout)
     {
@@ -36,9 +40,10 @@ public sealed class GrpcBalanceBackend : IBalanceBackend, IDisposable
         _timeout = timeout;
     }
 
-    public async Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency)
+    public async Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency, string correlationId)
         => await _client.GetBalanceAsync(
             new Proto.GetBalanceRequest { AccountId = accountId, Currency = currency },
+            headers: new Metadata { { CorrelationHeader, correlationId } },
             deadline: DateTime.UtcNow.Add(_timeout));
 
     public void Dispose() => _channel.Dispose();

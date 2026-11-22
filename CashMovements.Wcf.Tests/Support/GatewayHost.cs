@@ -13,15 +13,15 @@ internal sealed class GatewayHost : IDisposable
 {
     private readonly List<ICommunicationObject> _opened = [];
 
-    /// <summary>Messages the service logged.</summary>
-    public List<string> Log { get; } = [];
+    /// <summary>What the hosted service logged.</summary>
+    public CapturingLogger<LegacyBalanceService> Logger { get; } = new();
 
     /// <summary>Hosts <see cref="LegacyBalanceService"/> over <paramref name="backend"/> and returns a client for it.</summary>
     public ILegacyBalanceService Start(IBalanceBackend backend)
     {
         var address = new Uri($"net.tcp://localhost:{FreePort()}/CashMovements/Balance");
 
-        var host = new ServiceHost(new LegacyBalanceService(backend, message => { lock (Log) Log.Add(message); }), address);
+        var host = new ServiceHost(new LegacyBalanceService(backend, Logger), address);
         host.AddServiceEndpoint(typeof(ILegacyBalanceService), Binding(), "");
         host.Open();
         _opened.Add(host);

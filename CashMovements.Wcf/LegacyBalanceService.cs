@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.ServiceModel;
 using CashMovements.Wcf.Contracts;
 using Grpc.Core;
+using Microsoft.Extensions.Logging;
 
 namespace CashMovements.Wcf;
 
@@ -18,41 +20,56 @@ namespace CashMovements.Wcf;
 public sealed class LegacyBalanceService : ILegacyBalanceService
 {
     private readonly IBalanceBackend _backend;
-    private readonly Action<string> _log;
+    private readonly ILogger<LegacyBalanceService> _logger;
 
-    public LegacyBalanceService(IBalanceBackend backend, Action<string> log)
+    public LegacyBalanceService(IBalanceBackend backend, ILogger<LegacyBalanceService> logger)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<BalanceResult> GetBalanceAsync(string accountId, string currency)
     {
+        // One ID per call, logged here and sent to the gRPC server, which logs its side of the call under the same ID.
+        var correlationId = Guid.NewGuid().ToString("N");
+        var account = GatewayLog.MaskAccount(accountId);
+        var stopwatch = Stopwatch.StartNew();
+
+        using var scope = _logger.BeginScope(new Dictionary<string, object>
+        {
+            ["Operation"] = "GetBalance",
+            ["CorrelationId"] = correlationId,
+        });
+
         try
         {
-            var response = await _backend.GetBalanceAsync(accountId ?? "", currency ?? "");
+            var response = await _backend.GetBalanceAsync(accountId ?? "", currency ?? "", correlationId);
 
-            return new BalanceResult
+            var result = new BalanceResult
             {
                 AccountId = response.AccountId,
                 Currency = response.Currency,
                 Amount = decimal.Parse(response.Amount, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture),
                 AsAtUtc = response.AsAt.ToDateTime(),
             };
+
+            GatewayLog.BalanceReturned(_logger, account, result.Currency, stopwatch.Elapsed.TotalMilliseconds);
+            return result;
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.InvalidArgument)
         {
             // The backend's message describes the input problem and is safe to pass on.
+            GatewayLog.BalanceRejected(_logger, account, ex.Status.Detail);
             throw Fault(BalanceFaultCodes.InvalidArgument, ex.Status.Detail);
         }
         catch (RpcException ex) when (ex.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded)
         {
-            _log($"Backend unavailable for GetBalance({accountId}, {currency}): {ex.StatusCode} {ex.Status.Detail}");
+            GatewayLog.BackendUnavailable(_logger, account, ex.StatusCode.ToString(), ex.Status.Detail, stopwatch.Elapsed.TotalMilliseconds);
             throw Fault(BalanceFaultCodes.BackendUnavailable, "The balance service is not available. Try again later.");
         }
         catch (Exception ex)
         {
-            _log($"GetBalance({accountId}, {currency}) failed: {ex}");
+            GatewayLog.BalanceFailed(_logger, ex, account);
             throw Fault(BalanceFaultCodes.Internal, "An unexpected error occurred.");
         }
     }

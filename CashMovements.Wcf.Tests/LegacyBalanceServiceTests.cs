@@ -1,14 +1,16 @@
 using System.ServiceModel;
 using CashMovements.Wcf.Contracts;
+using CashMovements.Wcf.Tests.Support;
 using Grpc.Core;
+using Microsoft.Extensions.Logging;
 
 namespace CashMovements.Wcf.Tests;
 
 public class LegacyBalanceServiceTests
 {
-    private readonly List<string> _log = [];
+    private readonly CapturingLogger<LegacyBalanceService> _logger = new();
 
-    private LegacyBalanceService Service(IBalanceBackend backend) => new(backend, _log.Add);
+    private LegacyBalanceService Service(IBalanceBackend backend) => new(backend, _logger);
 
     [Fact]
     public async Task Maps_the_backend_balance_to_the_wcf_result()
@@ -71,7 +73,10 @@ public class LegacyBalanceServiceTests
 
         Assert.Equal(BalanceFaultCodes.BackendUnavailable, fault.Detail.Code);
         Assert.DoesNotContain("10.0.0.5", fault.Detail.Message);
-        Assert.Single(_log);
+        var entry = Assert.Single(_logger.Entries);
+        Assert.Equal(4003, entry.EventId.Id); // BackendUnavailable
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Equal(status.ToString(), entry.Fields["StatusCode"]);
     }
 
     [Fact]
@@ -81,7 +86,10 @@ public class LegacyBalanceServiceTests
 
         Assert.Equal(BalanceFaultCodes.Internal, fault.Detail.Code);
         Assert.DoesNotContain("secret", fault.Detail.Message);
-        Assert.Contains("secret", Assert.Single(_log)); // logged for the operator instead
+        var entry = Assert.Single(_logger.Entries); // logged for the operator instead
+        Assert.Equal(4004, entry.EventId.Id);      // BalanceFailed
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.Contains("secret", entry.Exception!.Message);
     }
 
     [Fact]
@@ -99,6 +107,68 @@ public class LegacyBalanceServiceTests
 
         Assert.Equal(BalanceFaultCodes.Internal, fault.Detail.Code);
         Assert.DoesNotContain("secret", fault.Detail.Message);
+    }
+
+    // ---------- Logging ----------
+
+    [Fact]
+    public async Task Each_call_sends_a_new_correlation_id_to_the_backend_and_logs_under_it()
+    {
+        var backend = FakeBalanceBackend.Returning("1.00");
+
+        await Service(backend).GetBalanceAsync("ACC-1001", "ZAR");
+        await Service(backend).GetBalanceAsync("ACC-1001", "ZAR");
+
+        Assert.Equal(2, backend.CorrelationIds.Distinct().Count());
+        Assert.All(backend.CorrelationIds, id => Assert.Matches("^[0-9a-f]{32}$", id));
+        Assert.Equal(backend.CorrelationIds, _logger.Entries.Select(e => e.Scope["CorrelationId"]));
+        Assert.All(_logger.Entries, e => Assert.Equal("GetBalance", e.Scope["Operation"]));
+    }
+
+    [Fact]
+    public async Task A_returned_balance_is_logged_with_the_account_masked_and_no_amount()
+    {
+        await Service(FakeBalanceBackend.Returning("39600.01")).GetBalanceAsync("ACC-1001", "zar");
+
+        var entry = Assert.Single(_logger.Entries);
+        Assert.Equal(4001, entry.EventId.Id); // BalanceReturned
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Equal("****1001", entry.Fields["Account"]);
+        Assert.Equal("ZAR", entry.Fields["Currency"]);
+        Assert.DoesNotContain("ACC-1001", entry.AllText);
+        Assert.DoesNotContain("39600", entry.AllText);
+    }
+
+    [Fact]
+    public async Task Invalid_input_is_logged_as_rejected_with_the_reason()
+    {
+        await FaultOf(FakeBalanceBackend.Failing(StatusCode.InvalidArgument, "Currency is required."));
+
+        var entry = Assert.Single(_logger.Entries);
+        Assert.Equal(4002, entry.EventId.Id); // BalanceRejected
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Equal("Currency is required.", entry.Fields["Reason"]);
+    }
+
+    [Fact]
+    public async Task No_log_entry_ever_contains_the_raw_account_id()
+    {
+        var backends = new IBalanceBackend[]
+        {
+            FakeBalanceBackend.Returning("1.00"),
+            FakeBalanceBackend.Failing(StatusCode.InvalidArgument, "bad"),
+            FakeBalanceBackend.Failing(StatusCode.Unavailable, "down"),
+            FakeBalanceBackend.Throwing(new InvalidOperationException("boom")),
+        };
+
+        foreach (var backend in backends)
+        {
+            try { await Service(backend).GetBalanceAsync("ACCOUNT-SECRET-1234", "ZAR"); }
+            catch (FaultException<BalanceFault>) { }
+        }
+
+        Assert.Equal(4, _logger.Entries.Count);
+        Assert.All(_logger.Entries, e => Assert.DoesNotContain("ACCOUNT-SECRET", e.AllText));
     }
 
     private Task<FaultException<BalanceFault>> FaultOf(IBalanceBackend backend)

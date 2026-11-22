@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Proto = CashMovements.Grpc.Contracts;
 
 namespace CashMovements.IntegrationTests.Support;
@@ -32,6 +33,9 @@ internal sealed class GrpcTestHost : IDisposable
             // Tests own their database; never touch the developer's local one.
             builder.UseSetting("Database:AutoSetup", "false");
 
+            // Everything the host logs is captured, so tests can check log events, fields and scopes.
+            builder.ConfigureLogging(logging => logging.AddProvider(Logs));
+
             if (sqlConnectionString is not null)
                 builder.UseSetting("ConnectionStrings:CashMovements", sqlConnectionString);
 
@@ -51,6 +55,9 @@ internal sealed class GrpcTestHost : IDisposable
 
         Client = new Proto.Movements.MovementsClient(_channel);
     }
+
+    /// <summary>Every log entry the host has written.</summary>
+    public CapturingLoggerProvider Logs { get; } = new();
 
     /// <summary>The in-memory repository (only when the host was not given a SQL Server connection string).</summary>
     public InMemoryMovementRepository Repository

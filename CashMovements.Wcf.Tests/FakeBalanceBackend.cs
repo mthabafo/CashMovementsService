@@ -15,6 +15,8 @@ internal sealed class FakeBalanceBackend : IBalanceBackend
 
     public List<(string AccountId, string Currency)> Calls { get; } = [];
 
+    public List<string> CorrelationIds { get; } = [];
+
     public static FakeBalanceBackend Returning(string amount)
         => new((account, currency) => new Proto.GetBalanceResponse
         {
@@ -30,9 +32,10 @@ internal sealed class FakeBalanceBackend : IBalanceBackend
     public static FakeBalanceBackend Throwing(Exception exception)
         => new((_, _) => throw exception);
 
-    public async Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency)
+    public async Task<Proto.GetBalanceResponse> GetBalanceAsync(string accountId, string currency, string correlationId)
     {
         Calls.Add((accountId, currency));
+        CorrelationIds.Add(correlationId);
         await Task.Yield();
         return _respond(accountId, currency);
     }

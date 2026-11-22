@@ -17,6 +17,7 @@ namespace CashMovements.Infrastructure.Persistence;
 /// </summary>
 public sealed class SqlRetryPolicy
 {
+    private static readonly EventId RetryEvent = new(3001, "DatabaseRetry");
     private static readonly ResiliencePropertyKey<long> StartedAt = new("CashMovements.SqlRetry.StartedAt");
 
     private readonly ResiliencePipeline _pipeline;
@@ -60,6 +61,7 @@ public sealed class SqlRetryPolicy
                 OnRetry = args =>
                 {
                     logger.LogWarning(
+                        RetryEvent,
                         args.Outcome.Exception,
                         "Transient database failure; retry {Retry} of {MaxRetries} in {DelayMs:0} ms.",
                         args.AttemptNumber + 1,

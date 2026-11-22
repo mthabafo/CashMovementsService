@@ -93,6 +93,22 @@ public sealed class ParityTests : IClassFixture<GrpcServerFixture>, IDisposable
         Assert.Equal(grpc.Status.Detail, legacy.Detail.Message);
     }
 
+    [Fact]
+    public async Task A_legacy_call_can_be_followed_into_the_server_logs_by_its_correlation_id()
+    {
+        await _legacy.GetBalanceAsync(_accountA, "ZAR");
+        var correlationId = (string)_gateway.Logger.Entries.Last().Scope["CorrelationId"]!;
+
+        // The server writes JSON log lines; its call summary (event 2001, GrpcCallCompleted) for this request carries the
+        // gateway's correlation ID. The JSON formatter writes event IDs as numbers, not names.
+        var summary = await _server.WaitForOutputLineAsync(line => line.Contains(correlationId) && line.Contains("\"EventId\":2001"));
+
+        Assert.True(summary is not null, $"No GrpcCallCompleted line with correlation ID {correlationId}. Server output:{Environment.NewLine}{_server.OutputTail()}");
+        Assert.Contains("GetBalance", summary);
+        Assert.Contains("\"StatusCode\":\"OK\"", summary);
+        Assert.DoesNotContain(_accountA, summary);
+    }
+
     private async Task AssertSameBalanceAsync(string accountId, string currency, decimal expected)
     {
         var grpc = await _server.Client.GetBalanceAsync(new Proto.GetBalanceRequest { AccountId = accountId, Currency = currency });

@@ -1,9 +1,10 @@
 using System.Configuration;
 using System.ServiceModel;
 using CashMovements.Wcf;
+using Microsoft.Extensions.Logging;
 
 // Self-hosted WCF gateway. Endpoints, binding and security are in App.config (system.serviceModel);
-// the backend address and timeout are in appSettings. Runs until Ctrl+C.
+// the backend address, timeout and log format are in appSettings. Runs until Ctrl+C.
 
 var backendUrl = ConfigurationManager.AppSettings["GrpcBackendUrl"];
 if (string.IsNullOrWhiteSpace(backendUrl) || !Uri.TryCreate(backendUrl, UriKind.Absolute, out var backendUri))
@@ -13,10 +14,34 @@ if (string.IsNullOrWhiteSpace(backendUrl) || !Uri.TryCreate(backendUrl, UriKind.
 
 var timeoutSeconds = int.TryParse(ConfigurationManager.AppSettings["BackendTimeoutSeconds"], out var seconds) && seconds > 0 ? seconds : 10;
 
-void Log(string message) => Console.WriteLine($"{DateTime.Now:HH:mm:ss} {message}");
+// Structured logs: readable single lines by default, JSON (one object per line, with scopes) when LogFormat is "json".
+var jsonLogs = string.Equals(ConfigurationManager.AppSettings["LogFormat"], "json", StringComparison.OrdinalIgnoreCase);
+using var loggerFactory = LoggerFactory.Create(logging =>
+{
+    logging.SetMinimumLevel(LogLevel.Information);
+    if (jsonLogs)
+    {
+        logging.AddJsonConsole(options =>
+        {
+            options.IncludeScopes = true;
+            options.UseUtcTimestamp = true;
+            options.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+        });
+    }
+    else
+    {
+        logging.AddSimpleConsole(options =>
+        {
+            options.IncludeScopes = true;
+            options.SingleLine = true;
+            options.TimestampFormat = "HH:mm:ss ";
+        });
+    }
+});
+var log = loggerFactory.CreateLogger("CashMovements.Wcf");
 
 using var backend = new GrpcBalanceBackend(backendUri, TimeSpan.FromSeconds(timeoutSeconds));
-var host = new ServiceHost(new LegacyBalanceService(backend, Log));
+var host = new ServiceHost(new LegacyBalanceService(backend, loggerFactory.CreateLogger<LegacyBalanceService>()));
 
 try
 {
@@ -27,11 +52,11 @@ catch (Exception ex) when (ex is AddressAlreadyInUseException or CommunicationEx
     return Fail($"Could not start the WCF host: {ex.Message}");
 }
 
-Log("CashMovements legacy WCF gateway started.");
+log.LogInformation("CashMovements legacy WCF gateway started.");
 foreach (var endpoint in host.Description.Endpoints)
-    Log($"  {endpoint.Contract.Name}: {endpoint.Address.Uri}");
-Log($"  Backend (gRPC-Web): {backendUri}");
-Log("Press Ctrl+C to stop.");
+    log.LogInformation("Endpoint {Contract}: {Address}", endpoint.Contract.Name, endpoint.Address.Uri);
+log.LogInformation("Backend (gRPC-Web): {BackendUrl}", backendUri);
+log.LogInformation("Press Ctrl+C to stop.");
 
 using var stop = new ManualResetEventSlim();
 Console.CancelKeyPress += (_, e) =>
@@ -41,7 +66,7 @@ Console.CancelKeyPress += (_, e) =>
 };
 stop.Wait();
 
-Log("Stopping...");
+log.LogInformation("Stopping...");
 try
 {
     host.Close(TimeSpan.FromSeconds(5));

@@ -1,10 +1,13 @@
 ﻿using System.Runtime.CompilerServices;
 using CashMovements.Application.Interfaces;
+using CashMovements.Application.Logging;
 using CashMovements.Domain.Entities;
 using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.Interfaces;
 using CashMovements.Domain.ReadModels;
 using CashMovements.Domain.ValueObjects;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CashMovements.Application;
 
@@ -12,11 +15,14 @@ public sealed class MovementService : IMovementService
 {
     private readonly IMovementRepository _repository;
     private readonly TimeProvider _clock;
+    private readonly ILogger<MovementService> _logger;
 
-    public MovementService(IMovementRepository repository, TimeProvider clock)
+    /// <param name="logger">Business events (see <see cref="ApplicationLog"/>); none are logged if omitted.</param>
+    public MovementService(IMovementRepository repository, TimeProvider clock, ILogger<MovementService>? logger = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _logger = logger ?? NullLogger<MovementService>.Instance;
     }
 
     public async Task<Balance> GetBalanceAsync(
@@ -71,11 +77,16 @@ public sealed class MovementService : IMovementService
             cancellationToken);
 
         if (existing is not null)
-            return ResolveResubmission(existing, movement);
+            return ResolveResubmission(existing, movement, lostInsertRace: false);
 
         try
         {
-            return await _repository.AddAsync(movement, cancellationToken);
+            var recorded = await _repository.AddAsync(movement, cancellationToken);
+
+            ApplicationLog.MovementRecorded(
+                _logger, recorded.Id, LogMask.Account(recorded.AccountId.Value), recorded.ExternalRef.Value, recorded.Currency.Code);
+
+            return recorded;
         }
         catch (DuplicateMovementException)
         {
@@ -90,7 +101,7 @@ public sealed class MovementService : IMovementService
             if (winner is null)
                 throw; // Not expected: movements are never deleted.
 
-            return ResolveResubmission(winner, movement);
+            return ResolveResubmission(winner, movement, lostInsertRace: true);
         }
     }
 
@@ -98,19 +109,80 @@ public sealed class MovementService : IMovementService
     /// A re-submission of an existing (account, ref): the same amount and currency is a retry and returns the original
     /// movement; anything else is a genuine duplicate.
     /// </summary>
-    private static Movement ResolveResubmission(Movement existing, Movement submitted)
-        => existing.Amount == submitted.Amount && existing.Currency == submitted.Currency
-            ? existing
-            : throw new DuplicateMovementException(submitted.ExternalRef);
+    private Movement ResolveResubmission(Movement existing, Movement submitted, bool lostInsertRace)
+    {
+        var account = LogMask.Account(submitted.AccountId.Value);
+        var externalRef = submitted.ExternalRef.Value;
 
-    private static async IAsyncEnumerable<StatementLine> StreamLinesAsync(
+        var differs = new List<string>(2);
+        if (existing.Amount != submitted.Amount)
+            differs.Add("amount");
+        if (existing.Currency != submitted.Currency)
+            differs.Add("currency");
+
+        if (differs.Count > 0)
+        {
+            ApplicationLog.MovementConflict(_logger, externalRef, account, string.Join(" and ", differs));
+            throw new DuplicateMovementException(submitted.ExternalRef);
+        }
+
+        ApplicationLog.MovementReplayed(_logger, externalRef, account, existing.Id, lostInsertRace);
+        return existing;
+    }
+
+    /// <summary>
+    /// Turns movements into statement lines with running balances, one at a time, and logs how the statement ended:
+    /// completed, or ended early because the caller cancelled, a row failed, or the caller stopped reading.
+    /// </summary>
+    private async IAsyncEnumerable<StatementLine> StreamLinesAsync(
         StatementHeader header,
         IAsyncEnumerable<Movement> movements,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var calculator = new StatementCalculator(header);
+        var started = _clock.GetTimestamp();
+        string? endedEarly = "stopped"; // until proven otherwise: the caller stopped reading before the end
 
-        await foreach (var movement in movements.WithCancellation(cancellationToken))
-            yield return calculator.Add(movement);
+        try
+        {
+            // Enumerated by hand because "yield return" isn't allowed inside a try block that has a catch.
+            await using var enumerator = movements.GetAsyncEnumerator(cancellationToken);
+            while (true)
+            {
+                StatementLine line;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync())
+                    {
+                        endedEarly = null;
+                        yield break;
+                    }
+
+                    line = calculator.Add(enumerator.Current);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    endedEarly = "cancelled";
+                    throw;
+                }
+                catch
+                {
+                    endedEarly = "failed"; // the cause is logged where the error is reported
+                    throw;
+                }
+
+                yield return line;
+            }
+        }
+        finally
+        {
+            var account = LogMask.Account(header.AccountId.Value);
+            var elapsedMs = _clock.GetElapsedTime(started).TotalMilliseconds;
+
+            if (endedEarly is null)
+                ApplicationLog.StatementCompleted(_logger, account, header.Currency.Code, header.From, header.To, calculator.LineCount, elapsedMs);
+            else
+                ApplicationLog.StatementEndedEarly(_logger, account, header.Currency.Code, header.From, header.To, endedEarly, calculator.LineCount, elapsedMs);
+        }
     }
 }

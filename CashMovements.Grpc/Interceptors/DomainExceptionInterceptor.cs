@@ -17,6 +17,9 @@ namespace CashMovements.Grpc.Interceptors;
 /// </summary>
 public sealed class DomainExceptionInterceptor : Interceptor
 {
+    private static readonly EventId StorageUnavailableEvent = new(2002, "StorageUnavailable");
+    private static readonly EventId UnhandledErrorEvent = new(2003, "UnhandledError");
+
     private readonly ILogger<DomainExceptionInterceptor> _logger;
 
     public DomainExceptionInterceptor(ILogger<DomainExceptionInterceptor> logger) => _logger = logger;
@@ -67,11 +70,11 @@ public sealed class DomainExceptionInterceptor : Interceptor
 
             case StorageUnavailableException:
                 // Temporary: Unavailable tells clients (and retry policies) it's worth trying again later.
-                _logger.LogWarning(ex, "Movement store unavailable in gRPC call {Method}", context.Method);
+                _logger.LogWarning(StorageUnavailableEvent, ex, "Movement store unavailable in gRPC call {GrpcMethod}.", context.Method);
                 return new RpcException(new Status(StatusCode.Unavailable, "The service is temporarily unavailable. Try again later."));
 
             default:
-                _logger.LogError(ex, "Unhandled exception in gRPC call {Method}", context.Method);
+                _logger.LogError(UnhandledErrorEvent, ex, "Unhandled exception in gRPC call {GrpcMethod}.", context.Method);
                 return new RpcException(new Status(StatusCode.Internal, "An unexpected error occurred."));
         }
     }

@@ -40,6 +40,31 @@ For retries to help, set these in each environment's connection string:
 | `Pool Blocking Period` | `NeverBlock` | Otherwise, after a failed connection, SqlClient fails new attempts straight away for 5 s or more, so retries can't succeed |
 | `ConnectRetryCount` / `ConnectRetryInterval` | `3` / `2` | SqlClient quietly re-establishes broken idle pooled connections, for example after a failover |
 
+## Logging
+
+Both services write structured logs to the console: readable single lines in development, and JSON (one object per
+line, with scopes) elsewhere. The gRPC server switches by environment (`Logging:Console` in `appsettings.json`); the
+WCF gateway uses `LogFormat` in its `App.config`.
+
+- **Correlation:** every log written during a gRPC call carries `GrpcMethod` and `CorrelationId`. The ID comes from the
+  caller's `x-correlation-id` header, or is generated, and is returned in the response trailers. The WCF gateway
+  generates one per call and sends it on, so a legacy call can be followed into the server's logs.
+- **Privacy:** account IDs are masked to their last 4 characters (`****1001`); amounts, narrations and connection
+  strings are never logged.
+
+| Event ID | Name | Level | Logged when |
+|---|---|---|---|
+| 1001 | `MovementRecorded` | Information | A new movement is recorded |
+| 1002 | `MovementReplayed` | Information | A re-submission returns the original movement (`LostInsertRace` if it arrived at the same moment) |
+| 1003 | `MovementConflict` | Warning | A re-used reference has a different amount or currency (`ConflictingFields`) |
+| 1101 | `StatementCompleted` | Information | A statement finished (`LineCount`, `ElapsedMs`) |
+| 1102 | `StatementEndedEarly` | Warning | A statement was cancelled, failed or abandoned part-way (`Reason`) |
+| 2001 | `GrpcCallCompleted` | Information, Warning for server-side failures | Every gRPC call ends (`StatusCode`, `ElapsedMs`) |
+| 2002 | `StorageUnavailable` | Warning | The database is unavailable after retries |
+| 2003 | `UnhandledError` | Error | An unexpected error, reported to the caller as `Internal` |
+| 3001 | `DatabaseRetry` | Warning | A transient database failure is retried |
+| 4001–4004 | `BalanceReturned`, `BalanceRejected`, `BackendUnavailable`, `BalanceFailed` | Information to Error | The WCF gateway's outcome for each call |
+
 ## Automated tests
 
 ```powershell

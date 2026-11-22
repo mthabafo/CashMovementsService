@@ -81,6 +81,7 @@ dotnet run --project CashMovements.Grpc --launch-profile http
 |---|---|---|
 | `appSettings/GrpcBackendUrl` | `http://localhost:5146` | The gRPC service's gRPC-Web endpoint (`Kestrel:Endpoints:GrpcWeb` in its `appsettings.json`) |
 | `appSettings/BackendTimeoutSeconds` | `10` | Deadline for each backend call |
+| `appSettings/LogFormat` | `simple` | Console log format: `simple` (readable single lines) or `json` (one object per line, for log collectors) |
 | service base address | `net.tcp://localhost:8095/CashMovements/Balance` | Where the gateway listens |
 | `netTcpBinding` "WindowsTransport" | Transport security, Windows credentials, encrypt and sign | Callers authenticate with their Windows account; nothing to configure locally |
 

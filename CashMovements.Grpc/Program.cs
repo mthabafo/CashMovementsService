@@ -9,7 +9,12 @@ using CashMovements.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddGrpc(options => options.Interceptors.Add<DomainExceptionInterceptor>());
+builder.Services.AddGrpc(options =>
+{
+    // Order matters: the first runs outermost. Call logging sees the final status, after exceptions are translated.
+    options.Interceptors.Add<CallLoggingInterceptor>();
+    options.Interceptors.Add<DomainExceptionInterceptor>();
+});
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApplication();

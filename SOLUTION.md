@@ -154,8 +154,9 @@ Deliberate simplifications, each with what a production system would do instead.
 - **Secrets:** development connects with Windows authentication, so no password is stored. Production would supply
   the connection string through environment variables or a vault, using a least-privilege login that can only run the
   stored procedures; none of that is set up here.
-- **Logging is plain console output**, with no structured logs, metrics or tracing, and the WCF gateway logs account
-  IDs unmasked.
+- **Logs go to the console only**: they're structured (JSON outside development, with event IDs and correlation IDs),
+  but there's no central log store, metrics or distributed tracing; production would ship them to a log platform and
+  add OpenTelemetry metrics and traces.
 - **No circuit breaker or rate limiting**: transient database failures are retried, but a long outage is retried by
   every request.
 

@@ -59,7 +59,7 @@ public sealed class GrpcServerFixture : IAsyncLifetime
         start.EnvironmentVariables["Database__AutoSetup"] = "true"; // create the database and run the scripts
         start.EnvironmentVariables["Kestrel__Endpoints__Grpc__Url"] = $"http://127.0.0.1:{Support.GatewayHost.FreePort()}";
         start.EnvironmentVariables["Kestrel__Endpoints__GrpcWeb__Url"] = GrpcWebAddress.ToString().TrimEnd('/');
-        start.EnvironmentVariables["Logging__LogLevel__Default"] = "Warning";
+        start.EnvironmentVariables["Logging__LogLevel__Default"] = "Information"; // JSON lines (not Development), read by ParityTests
 
         _process = new Process { StartInfo = start };
         _process.OutputDataReceived += (_, e) => Capture(e.Data);
@@ -167,5 +167,25 @@ public sealed class GrpcServerFixture : IAsyncLifetime
     {
         lock (_output)
             return _output.ToString();
+    }
+
+    /// <summary>The last part of the server's console output, for failure messages.</summary>
+    public string OutputTail(int characters = 4000)
+    {
+        var output = Output();
+        return output.Length <= characters ? output : output.Substring(output.Length - characters);
+    }
+
+    /// <summary>Waits up to 10 seconds for a line of the server's console output that satisfies <paramref name="match"/>.</summary>
+    public async Task<string?> WaitForOutputLineAsync(Func<string, bool> match)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            var line = Output().Split(new[] { Environment.NewLine, "\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(match);
+            if (line is not null || DateTime.UtcNow > deadline)
+                return line;
+            await Task.Delay(100);
+        }
     }
 }
