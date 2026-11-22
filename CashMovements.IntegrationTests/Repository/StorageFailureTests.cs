@@ -1,3 +1,4 @@
+using CashMovements.Domain.Entities;
 using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.ValueObjects;
 using CashMovements.Infrastructure.Persistence;
@@ -30,7 +31,7 @@ public sealed class StorageFailureTests
         var repository = Repository(new SqlConnectionStringBuilder(_db.ConnectionString) { CommandTimeout = 1 });
 
         var ex = await Assert.ThrowsAsync<StorageUnavailableException>(
-            () => repository.SumAmountsAsync(Account, Zar, CancellationToken.None));
+            () => repository.AddAsync(NewMovement(), CancellationToken.None));
 
         Assert.Equal(-2, Assert.IsType<SqlException>(ex.InnerException).Number); // SQL Server's timeout
     }
@@ -42,7 +43,7 @@ public sealed class StorageFailureTests
         var repository = Repository(new SqlConnectionStringBuilder(_db.ConnectionString) { CommandTimeout = 30 });
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
-        var ex = await Record.ExceptionAsync(() => repository.SumAmountsAsync(Account, Zar, cancellation.Token));
+        var ex = await Record.ExceptionAsync(() => repository.AddAsync(NewMovement(), cancellation.Token));
 
         Assert.NotNull(ex);
         Assert.IsNotType<StorageUnavailableException>(ex);
@@ -94,7 +95,13 @@ public sealed class StorageFailureTests
     private static MovementRepository Repository(SqlConnectionStringBuilder connectionString)
         => new(new SqlConnectionFactory(connectionString.ConnectionString));
 
-    /// <summary>Holds an exclusive lock on dbo.Movement until disposed, so any other read or write waits.</summary>
+    private static Movement NewMovement()
+        => Movement.Create(Account.Value, "T-" + Guid.NewGuid().ToString("N")[..8], 10m, "ZAR", DateTimeOffset.UtcNow.AddDays(-1), null, TimeProvider.System);
+
+    /// <summary>
+    /// Holds an exclusive lock on dbo.Movement until disposed, so any write waits. (Reads don't: with
+    /// READ_COMMITTED_SNAPSHOT they read committed row versions without locks, so these tests block an insert.)
+    /// </summary>
     private async Task<IAsyncDisposable> LockMovementTableAsync()
     {
         var connection = new SqlConnection(_db.ConnectionString);

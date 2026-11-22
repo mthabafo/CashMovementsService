@@ -5,6 +5,16 @@
 ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION ON;
 GO
 
+-- READ_COMMITTED_SNAPSHOT: ordinary reads (balances, external-ref lookups) see the last committed version of each row
+-- instead of taking shared locks, so they never wait for an insert and an insert never waits for them. Cheap here:
+-- snapshot isolation already keeps row versions, and the ledger never updates or deletes, so there are almost no old
+-- versions to store. Uniqueness is unaffected: the unique key is always checked with locks.
+-- Switching it on needs the database to itself, so WITH ROLLBACK IMMEDIATE disconnects other sessions. That happens
+-- only the first time: once it's on, the check skips it (and on Azure SQL Database, where it's on by default).
+IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE database_id = DB_ID() AND is_read_committed_snapshot_on = 1)
+    ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+GO
+
 IF OBJECT_ID(N'dbo.Movement', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Movement
