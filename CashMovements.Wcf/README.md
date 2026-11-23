@@ -46,19 +46,19 @@ The gateway needs the gRPC service running. Easiest, from the solution folder:
 This builds and starts the gRPC service and the gateway, then opens the legacy client's prompt:
 
 ```text
-legacy> ACC-1001 ZAR
+cashmovements.wcf> ACC-1001 ZAR
   Account: ACC-1001
   Balance: 39600.01 ZAR
   As at:   2026-11-20 08:15:02Z
 
-legacy> exit
+cashmovements.wcf> exit
 ```
 
 Typing `exit` stops everything the script started. To get one balance without the prompt, pass it:
 `.\test.ps1 -Legacy ACC-2002 ZAR`.
 
 In Visual Studio, pick the **Server + WCF Client** launch profile and press F5. Three consoles open
-(gRPC server, gateway, legacy client); type into the legacy client's `legacy>` prompt. It waits for the other two to
+(gRPC server, gateway, legacy client); type into the legacy client's `cashmovements.wcf>` prompt. It waits for the other two to
 finish starting before the first call. If a window opens and closes straight away after the launch profiles changed,
 Visual Studio is still using the old ones: close and reopen the solution.
 

@@ -14,7 +14,8 @@ import "google/protobuf/timestamp.proto";
 // - Currency is a separate ISO 4217 code, e.g. "ZAR".
 // - Timestamps are UTC.
 // - Errors are gRPC status codes: INVALID_ARGUMENT (bad input), ALREADY_EXISTS (external ref reused with a
-//   different amount or currency), INTERNAL (anything unexpected).
+//   different amount or currency), UNAVAILABLE (the database can't be reached; retry later), INTERNAL (anything
+//   unexpected).
 service Movements {
   rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
 
