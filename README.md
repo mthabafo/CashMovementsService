@@ -60,7 +60,7 @@ arrived and ask again.
 |---|---|
 | `account_id` | Required, at most 34 characters. Spaces at either end are trimmed. **Case-sensitive**: `ACC-1001` and `acc-1001` are different accounts. Any account ID is accepted: there's no list of accounts, so an account with no movements has a balance of `0.00` |
 | `external_ref` | Required, at most 64 characters, trimmed, case-sensitive. Unique per account; the same reference can be used on different accounts |
-| `amount` | Required. Not zero, at most 2 decimal places, `.` as the decimal separator. No thousands separators, exponents or spaces, so `1,5`, `1e3` and `1 000` are rejected |
+| `amount` | Required. Not zero, at most 2 decimal places, and between -99999999999999999.99 and 99999999999999999.99 (what the database column holds). `.` as the decimal separator. No thousands separators, exponents or spaces, so `1,5`, `1e3` and `1 000` are rejected |
 | `currency` | Required, 3 letters, such as `ZAR`. Lower case is accepted and stored in upper case. Any 3 letters pass: the service doesn't check the ISO 4217 list |
 | `occurred_at` | Required. Not in the future; up to 5 minutes ahead is allowed for clock differences. Past dates are fine |
 | `narration` | Optional, at most 140 characters, trimmed. Blank is stored as no narration |

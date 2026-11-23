@@ -91,6 +91,31 @@ public sealed class MovementsGrpcSqlServerTests : IDisposable
         Assert.Equal((rounds * 10m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), balance.Amount);
     }
 
+    [Theory]
+    [InlineData("99999999999999999.99")]
+    [InlineData("-99999999999999999.99")]
+    public async Task The_largest_amount_the_database_column_holds_is_recorded(string amount)
+    {
+        var recorded = await _host.Client.RecordMovementAsync(Request("MAX", amount, daysAgo: 1));
+
+        Assert.Equal(amount, recorded.Movement.Amount);
+    }
+
+    [Theory]
+    [InlineData("100000000000000000")]
+    [InlineData("-100000000000000000.00")]
+    [InlineData("79228162514264337593543950335")] // decimal.MaxValue
+    public async Task An_amount_too_large_for_the_database_is_invalid_input_not_an_internal_error(string amount)
+    {
+        var ex = await Assert.ThrowsAsync<RpcException>(
+            async () => await _host.Client.RecordMovementAsync(Request("TOO-BIG", amount, daysAgo: 1)));
+        var balance = await _host.Client.GetBalanceAsync(new Proto.GetBalanceRequest { AccountId = _account, Currency = "ZAR" });
+
+        Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
+        Assert.Contains("Amount", ex.Status.Detail);
+        Assert.Equal("0.00", balance.Amount);
+    }
+
     private Proto.RecordMovementRequest Request(string externalRef, string amount, int daysAgo)
         => new()
         {

@@ -68,6 +68,28 @@ public class MovementTests
         => Assert.Throws<InvalidMovementException>(
             () => Create(amount: decimal.Parse(amount, CultureInfo.InvariantCulture)));
 
+    [Theory]
+    [InlineData("99999999999999999.99")]
+    [InlineData("-99999999999999999.99")]
+    public void The_largest_amount_the_database_holds_is_allowed(string amount)
+    {
+        var value = decimal.Parse(amount, CultureInfo.InvariantCulture);
+
+        Assert.Equal(value, Create(amount: value).Amount);
+    }
+
+    [Theory]
+    [InlineData("100000000000000000")]
+    [InlineData("-100000000000000000")]
+    [InlineData("79228162514264337593543950335")] // decimal.MaxValue
+    public void An_amount_too_large_for_the_database_is_rejected(string amount)
+    {
+        var ex = Assert.Throws<InvalidMovementException>(
+            () => Create(amount: decimal.Parse(amount, CultureInfo.InvariantCulture)));
+
+        Assert.Equal("Amount must be between -99999999999999999.99 and 99999999999999999.99.", ex.Message);
+    }
+
     [Fact]
     public void Trailing_zero_decimal_places_are_allowed()
         => Assert.Equal(1.5m, Create(amount: 1.500m).Amount);

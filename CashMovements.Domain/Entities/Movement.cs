@@ -1,4 +1,5 @@
-﻿using CashMovements.Domain.Exceptions;
+﻿using System.Globalization;
+using CashMovements.Domain.Exceptions;
 using CashMovements.Domain.ValueObjects;
 
 namespace CashMovements.Domain.Entities;
@@ -15,6 +16,9 @@ public sealed class Movement
 {
     public const int MaxDecimalPlaces = 2;
     public const int MaxNarrationLength = 140;
+
+    /// <summary>The largest amount, either way, that fits the database column (<c>DECIMAL(19,2)</c>).</summary>
+    public const decimal MaxAbsoluteAmount = 99_999_999_999_999_999.99m;
 
     /// <summary>How far into the future <see cref="OccurredAt"/> may be, to tolerate clock drift between systems.</summary>
     public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
@@ -144,6 +148,10 @@ public sealed class Movement
 
         if (decimal.Round(amount, MaxDecimalPlaces) != amount)
             throw new InvalidMovementException($"Amount must have at most {MaxDecimalPlaces} decimal places.");
+
+        if (Math.Abs(amount) > MaxAbsoluteAmount)
+            throw new InvalidMovementException(
+                $"Amount must be between -{MaxAbsoluteAmount.ToString(CultureInfo.InvariantCulture)} and {MaxAbsoluteAmount.ToString(CultureInfo.InvariantCulture)}.");
     }
 
     private static string? NormaliseNarration(string? narration)
